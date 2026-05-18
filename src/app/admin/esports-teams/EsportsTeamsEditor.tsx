@@ -10,6 +10,36 @@ function fmtFollow(n: number | null | undefined) {
   return v.toLocaleString('en-US');
 }
 
+// ─── handleOf: tolerate dirty data (full URLs, stray @, /videos tails)
+// Returns the bare handle no matter what got pasted into the DB.
+function handleOf(raw: string | null | undefined, kind: 'ig' | 'x' | 'tiktok' | 'yt' | 'twitch' | 'kick'): string | null {
+  if (!raw) return null;
+  let s = String(raw).trim().split('?')[0];
+  const patterns: Record<string, RegExp> = {
+    ig:    /^https?:\/\/(www\.)?instagram\.com\//i,
+    x:     /^https?:\/\/(www\.)?(twitter|x)\.com\/@?/i,
+    tiktok:/^https?:\/\/(www\.)?(vm\.|m\.)?tiktok\.com\/@?/i,
+    yt:    /^https?:\/\/(www\.|m\.)?youtube\.com\/(@|c\/|channel\/|user\/)?/i,
+    twitch:/^https?:\/\/(www\.)?twitch\.tv\//i,
+    kick:  /^https?:\/\/(www\.)?kick\.com\//i,
+  };
+  s = s.replace(patterns[kind], '');
+  s = s.replace(/^@/, '').replace(/\/$/, '').replace(/\/videos$/, '');
+  return s || null;
+}
+
+function urlFor(kind: 'ig' | 'x' | 'tiktok' | 'yt' | 'twitch' | 'kick', h: string | null): string | null {
+  if (!h) return null;
+  switch (kind) {
+    case 'ig':     return `https://instagram.com/${h}`;
+    case 'x':      return `https://x.com/${h}`;
+    case 'tiktok': return `https://tiktok.com/@${h}`;
+    case 'yt':     return `https://youtube.com/@${h}`;
+    case 'twitch': return `https://twitch.tv/${h}`;
+    case 'kick':   return `https://kick.com/${h}`;
+  }
+}
+
 export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
   const [rows, setRows] = useState(initial);
   const [editing, setEditing] = useState<number | null>(null);
@@ -86,31 +116,31 @@ export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
                   handle={cur.handle_ig} followers={cur.followers_ig}
                   onHandle={isEdit ? v => update('handle_ig', v) : null}
                   onFollowers={isEdit ? v => update('followers_ig', v) : null}
-                  url={cur.handle_ig ? `https://instagram.com/${cur.handle_ig.replace(/^@/, '')}` : null}
+                  url={urlFor('ig', handleOf(cur.handle_ig, 'ig'))} cleanHandle={handleOf(cur.handle_ig, 'ig')}
                 />
                 <SocialRow icon={Twitter} label="X / Twitter" prefix="@"
                   handle={cur.handle_x} followers={cur.followers_x}
                   onHandle={isEdit ? v => update('handle_x', v) : null}
                   onFollowers={isEdit ? v => update('followers_x', v) : null}
-                  url={cur.handle_x ? `https://x.com/${cur.handle_x.replace(/^@/, '')}` : null}
+                  url={urlFor('x', handleOf(cur.handle_x, 'x'))} cleanHandle={handleOf(cur.handle_x, 'x')}
                 />
                 <SocialRow icon={() => <span className="text-xs font-bold">TT</span>} label="TikTok" prefix="@"
                   handle={cur.handle_tiktok} followers={cur.followers_tiktok}
                   onHandle={isEdit ? v => update('handle_tiktok', v) : null}
                   onFollowers={isEdit ? v => update('followers_tiktok', v) : null}
-                  url={cur.handle_tiktok ? `https://tiktok.com/@${cur.handle_tiktok.replace(/^@/, '')}` : null}
+                  url={urlFor('tiktok', handleOf(cur.handle_tiktok, 'tiktok'))} cleanHandle={handleOf(cur.handle_tiktok, 'tiktok')}
                 />
                 <SocialRow icon={Youtube} label="YouTube" prefix="@"
                   handle={cur.handle_yt} followers={cur.subscribers_yt}
                   onHandle={isEdit ? v => update('handle_yt', v) : null}
                   onFollowers={isEdit ? v => update('subscribers_yt', v) : null}
-                  url={cur.handle_yt ? `https://youtube.com/@${cur.handle_yt.replace(/^@/, '')}` : null}
+                  url={urlFor('yt', handleOf(cur.handle_yt, 'yt'))} cleanHandle={handleOf(cur.handle_yt, 'yt')}
                 />
                 <SocialRow icon={Twitch} label="Twitch" prefix=""
                   handle={cur.handle_twitch} followers={cur.followers_twitch}
                   onHandle={isEdit ? v => update('handle_twitch', v) : null}
                   onFollowers={isEdit ? v => update('followers_twitch', v) : null}
-                  url={cur.handle_twitch ? `https://twitch.tv/${cur.handle_twitch}` : null}
+                  url={urlFor('twitch', handleOf(cur.handle_twitch, 'twitch'))} cleanHandle={handleOf(cur.handle_twitch, 'twitch')}
                 />
               </div>
 
@@ -144,13 +174,14 @@ function Kpi({ label, value, accent }: { label: string; value: string; accent?: 
 }
 
 function SocialRow({
-  icon: Icon, label, prefix, handle, followers, onHandle, onFollowers, url,
+  icon: Icon, label, prefix, handle, followers, onHandle, onFollowers, url, cleanHandle,
 }: {
   icon: any; label: string; prefix: string;
   handle: string | null; followers: number;
   onHandle: ((v: string) => void) | null;
   onFollowers: ((v: number) => void) | null;
   url: string | null;
+  cleanHandle?: string | null;
 }) {
   const editing = !!onHandle;
   return (
@@ -166,9 +197,9 @@ function SocialRow({
             placeholder={`${prefix}handle`}
             className="input !py-0.5 !px-1.5 text-xs w-full"
           />
-        ) : handle ? (
+        ) : cleanHandle ? (
           <a href={url ?? '#'} target="_blank" rel="noreferrer" className="text-ink hover:text-greenDark truncate flex items-center gap-1">
-            {prefix}{handle}<ExternalLink size={10} />
+            {prefix}{cleanHandle}<ExternalLink size={10} />
           </a>
         ) : (
           <span className="text-mute italic">{label} —</span>
