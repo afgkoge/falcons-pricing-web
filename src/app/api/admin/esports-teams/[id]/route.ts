@@ -10,8 +10,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const allowed = [
     'team_name','logo_url','brand_color',
-    'handle_ig','handle_x','handle_tiktok','handle_yt','handle_twitch','handle_kick','discord_url',
-    'followers_ig','followers_x','followers_tiktok','subscribers_yt','followers_twitch',
+    'handle_ig','handle_x','handle_tiktok','handle_yt','handle_twitch','handle_kick','handle_fb','discord_url',
+    'followers_ig','followers_x','followers_tiktok','subscribers_yt','followers_twitch','followers_fb',
     'is_active','sort_order','notes',
   ];
   const upd: Record<string, any> = {};

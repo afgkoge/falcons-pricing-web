@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Save, Instagram, Twitter, Youtube, Twitch, ExternalLink } from 'lucide-react';
+import { Save, Instagram, Twitter, Youtube, Twitch, ExternalLink, Facebook } from 'lucide-react';
 import type { EsportsTeam } from '@/lib/types';
 
 function fmtFollow(n: number | null | undefined) {
@@ -12,7 +12,7 @@ function fmtFollow(n: number | null | undefined) {
 
 // ─── handleOf: tolerate dirty data (full URLs, stray @, /videos tails)
 // Returns the bare handle no matter what got pasted into the DB.
-function handleOf(raw: string | null | undefined, kind: 'ig' | 'x' | 'tiktok' | 'yt' | 'twitch' | 'kick'): string | null {
+function handleOf(raw: string | null | undefined, kind: 'ig' | 'x' | 'tiktok' | 'yt' | 'twitch' | 'kick' | 'fb'): string | null {
   if (!raw) return null;
   let s = String(raw).trim().split('?')[0];
   const patterns: Record<string, RegExp> = {
@@ -22,13 +22,14 @@ function handleOf(raw: string | null | undefined, kind: 'ig' | 'x' | 'tiktok' | 
     yt:    /^https?:\/\/(www\.|m\.)?youtube\.com\/(@|c\/|channel\/|user\/)?/i,
     twitch:/^https?:\/\/(www\.)?twitch\.tv\//i,
     kick:  /^https?:\/\/(www\.)?kick\.com\//i,
+    fb:    /^https?:\/\/(www\.|m\.)?facebook\.com\//i,
   };
   s = s.replace(patterns[kind], '');
   s = s.replace(/^@/, '').replace(/\/$/, '').replace(/\/videos$/, '');
   return s || null;
 }
 
-function urlFor(kind: 'ig' | 'x' | 'tiktok' | 'yt' | 'twitch' | 'kick', h: string | null): string | null {
+function urlFor(kind: 'ig' | 'x' | 'tiktok' | 'yt' | 'twitch' | 'kick' | 'fb', h: string | null): string | null {
   if (!h) return null;
   switch (kind) {
     case 'ig':     return `https://instagram.com/${h}`;
@@ -37,6 +38,7 @@ function urlFor(kind: 'ig' | 'x' | 'tiktok' | 'yt' | 'twitch' | 'kick', h: strin
     case 'yt':     return `https://youtube.com/@${h}`;
     case 'twitch': return `https://twitch.tv/${h}`;
     case 'kick':   return `https://kick.com/${h}`;
+    case 'fb':     return `https://facebook.com/${h}`;
   }
 }
 
@@ -74,13 +76,13 @@ export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
 
   const totalFollowers = rows.reduce((s, r) =>
     s + Number(r.followers_ig||0) + Number(r.followers_x||0) + Number(r.followers_tiktok||0) +
-        Number(r.subscribers_yt||0) + Number(r.followers_twitch||0), 0);
+        Number(r.subscribers_yt||0) + Number(r.followers_twitch||0) + Number((r as any).followers_fb||0), 0);
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Kpi label="Active brand accounts" value={rows.filter(r => r.is_active).length.toString()} />
-        <Kpi label="Channels populated" value={rows.filter(r => r.is_active && (r.handle_ig || r.handle_x || r.handle_tiktok || r.handle_yt || r.handle_twitch)).length.toString()} />
+        <Kpi label="Channels populated" value={rows.filter(r => r.is_active && (r.handle_ig || r.handle_x || r.handle_tiktok || r.handle_yt || r.handle_twitch || (r as any).handle_fb)).length.toString()} />
         <Kpi label="Total reach" value={fmtFollow(totalFollowers)} accent />
         <Kpi label="Inactive / legacy" value={inactiveCount.toString()} />
       </div>
@@ -107,7 +109,7 @@ export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
           const cur = isEdit ? { ...t, ...draft } as EsportsTeam : t;
           const reach = Number(cur.followers_ig||0) + Number(cur.followers_x||0) + Number(cur.followers_tiktok||0) +
                         Number(cur.subscribers_yt||0) + Number(cur.followers_twitch||0);
-          const channelCount = [cur.handle_ig, cur.handle_x, cur.handle_tiktok, cur.handle_yt, cur.handle_twitch].filter(Boolean).length;
+          const channelCount = [cur.handle_ig, cur.handle_x, cur.handle_tiktok, cur.handle_yt, cur.handle_twitch, (cur as any).handle_fb].filter(Boolean).length;
 
           return (
             <div key={t.id} className={['card overflow-hidden', isEdit ? 'ring-2 ring-green' : ''].join(' ')}>
@@ -127,7 +129,7 @@ export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-3 text-xs">
-                  <span className="text-label">{channelCount}/5 channels</span>
+                  <span className="text-label">{channelCount}/6 channels</span>
                   <span className="font-semibold text-greenDark tabular-nums">{fmtFollow(reach)} reach</span>
                 </div>
               </div>
@@ -162,6 +164,12 @@ export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
                   onHandle={isEdit ? v => update('handle_twitch', v) : null}
                   onFollowers={isEdit ? v => update('followers_twitch', v) : null}
                   url={urlFor('twitch', handleOf(cur.handle_twitch, 'twitch'))} cleanHandle={handleOf(cur.handle_twitch, 'twitch')}
+                />
+                <SocialRow icon={Facebook} label="Facebook" prefix=""
+                  handle={(cur as any).handle_fb} followers={(cur as any).followers_fb}
+                  onHandle={isEdit ? v => update('handle_fb' as any, v) : null}
+                  onFollowers={isEdit ? v => update('followers_fb' as any, v) : null}
+                  url={urlFor('fb', handleOf((cur as any).handle_fb, 'fb'))} cleanHandle={handleOf((cur as any).handle_fb, 'fb')}
                 />
               </div>
 
