@@ -1,0 +1,882 @@
+'use client';
+import Link from 'next/link';
+import {
+  Layers, Trophy, Users, Globe, BookOpen, Compass,
+  Sparkles, ShieldCheck, AlertTriangle, ArrowRight,
+  TrendingUp, Activity, GitBranch, Calculator, Lock,
+} from 'lucide-react';
+
+type Player = {
+  id: number; nickname: string; role: string | null; game: string | null;
+  team: string | null; nationality: string | null; tier_code: string | null;
+  rate_ig_reel: number; rate_irl: number;
+  authority_factor: number | null; measurement_confidence: string | null;
+  liquipedia_url?: string | null; prize_money_24mo_usd?: number | null;
+  audience_market?: string | null;
+  is_bookable?: boolean | null;
+  profile_strength_pct?: number | null;
+  intake_status?: string | null;
+  base_rate_anchor?: number | null;
+};
+type Creator = { id: number; nickname: string; tier_code: string | null;
+  rate_ig_reel: number; rate_yt_full: number; rate_tiktok_ours: number;
+  is_bookable?: boolean | null;
+  profile_strength_pct?: number | null;
+};
+type Tier = { code: string; label: string;
+  base_fee_min: number; base_fee_max: number; floor_share: number; sort_order: number };
+
+function regionOf(nat: string | null | undefined): string {
+  const n = (nat ?? '').toLowerCase().trim();
+  if (n.startsWith('saudi')) return 'KSA';
+  if (['emirati','bahraini','kuwaiti','qatari','omani'].includes(n)) return 'GCC (non-KSA)';
+  if (['egyptian','jordanian','lebanese','tunisian','moroccan','algerian','iraqi','syrian','palestinian'].includes(n)) return 'MENA broader';
+  if (['filipino','indonesian','vietnamese','thai','malaysian','singaporean','myanmar'].includes(n)) return 'SEA';
+  if (['korean','chinese','japanese','taiwanese'].includes(n)) return 'East Asia';
+  if (['american','canadian','british','french','german','danish','swedish','norwegian','dutch','spanish','italian','finnish','irish','polish','austrian','swiss','belgian','greek','iranian'].includes(n)) return 'NA / EU';
+  return 'Other / Unspecified';
+}
+
+export function PricingLogicContent({
+  players, creators, tiers,
+}: { players: Player[]; creators: Creator[]; tiers: Tier[] }) {
+  // ── Tier breakdown
+  // Computes live min/median/max IG Reel from the actual roster instead of
+  // showing the legacy 'tier range' band, which has drifted out of sync with
+  // the locked CPM × reach methodology.
+  const tierStats = tiers.map(t => {
+    const inTier = players.filter(p => p.tier_code === t.code);
+    const ratesNonZero = inTier
+      .map(p => Number(p.rate_ig_reel || 0))
+      .filter(n => n > 0)
+      .sort((a, b) => a - b);
+    const avgIg = ratesNonZero.length
+      ? Math.round(ratesNonZero.reduce((s, n) => s + n, 0) / ratesNonZero.length)
+      : 0;
+    const minIg = ratesNonZero.length ? ratesNonZero[0] : 0;
+    const maxIg = ratesNonZero.length ? ratesNonZero[ratesNonZero.length - 1] : 0;
+    const medIg = ratesNonZero.length
+      ? ratesNonZero[Math.floor(ratesNonZero.length / 2)]
+      : 0;
+    return { ...t, count: inTier.length, avg_ig_reel: avgIg, min_ig_reel: minIg, med_ig_reel: medIg, max_ig_reel: maxIg };
+  });
+
+  // ── Game breakdown (top 12 by count)
+  const gameMap = new Map<string, { count: number; sum: number; tiers: Set<string> }>();
+  players.forEach(p => {
+    const g = p.game || 'Unknown';
+    const cur = gameMap.get(g) ?? { count: 0, sum: 0, tiers: new Set() };
+    cur.count += 1; cur.sum += p.rate_ig_reel || 0;
+    if (p.tier_code) cur.tiers.add(p.tier_code);
+    gameMap.set(g, cur);
+  });
+  const games = Array.from(gameMap.entries())
+    .map(([game, v]) => ({ game, count: v.count, avg: Math.round(v.sum / Math.max(1, v.count)),
+      tiers: Array.from(v.tiers).sort() }))
+    .sort((a, b) => b.count - a.count);
+
+  // ── Team breakdown (top 10)
+  const teamMap = new Map<string, { count: number; sum: number; tiers: Set<string> }>();
+  players.forEach(p => {
+    const t = p.team || '—';
+    const cur = teamMap.get(t) ?? { count: 0, sum: 0, tiers: new Set() };
+    cur.count += 1; cur.sum += p.rate_ig_reel || 0;
+    if (p.tier_code) cur.tiers.add(p.tier_code);
+    teamMap.set(t, cur);
+  });
+  const teams = Array.from(teamMap.entries())
+    .map(([team, v]) => ({ team, count: v.count, avg: Math.round(v.sum / Math.max(1, v.count)),
+      tiers: Array.from(v.tiers).sort() }))
+    .sort((a, b) => b.count - a.count);
+
+  // ── Region breakdown
+  const regionMap = new Map<string, { count: number; sum: number }>();
+  players.forEach(p => {
+    const r = regionOf(p.nationality);
+    const cur = regionMap.get(r) ?? { count: 0, sum: 0 };
+    cur.count += 1; cur.sum += p.rate_ig_reel || 0;
+    regionMap.set(r, cur);
+  });
+  const regions = Array.from(regionMap.entries())
+    .map(([region, v]) => ({ region, count: v.count, avg: Math.round(v.sum / Math.max(1, v.count)) }))
+    .sort((a, b) => b.count - a.count);
+
+  // ── Role breakdown (just totals)
+  const byRole: Record<string, number> = {};
+  players.forEach(p => {
+    const r = p.role || 'Other';
+    byRole[r] = (byRole[r] || 0) + 1;
+  });
+
+  // ── Confidence + championship-authority counts
+  const confidenceCounts: Record<string, number> = {};
+  players.forEach(p => {
+    const c = p.measurement_confidence || 'unknown';
+    confidenceCounts[c] = (confidenceCounts[c] || 0) + 1;
+  });
+  const championAuthorityCount = players.filter(p => (p.authority_factor || 1) > 1.0).length;
+  // Liquipedia coverage — more meaningful than the dead authority_factor stat
+  // since the engine no longer uses per-player authority (it's a campaign axis).
+  const liquipediaWithUrlCount = players.filter(p => !!(p as any).liquipedia_url).length;
+  const liquipediaSyncedCount  = players.filter(p => Number((p as any).prize_money_24mo_usd ?? 0) > 0).length;
+
+  const fmtSar = (n: number) => `SAR ${Math.round(n).toLocaleString('en-US')}`;
+  const fmtUsd = (n: number) => `$${Math.round(n / 3.75).toLocaleString('en-US')}`;
+
+  return (
+    <div className="space-y-10 -mx-4 sm:-mx-6 lg:-mx-8 -mt-2 pb-10">
+      {/* ─── Hero ─────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden rounded-2xl bg-navy text-white px-6 sm:px-10 py-10 sm:py-14">
+        <div aria-hidden className="absolute -top-24 -right-24 w-80 h-80 rounded-full opacity-30 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #2ED06E 0%, transparent 70%)' }} />
+        <div aria-hidden className="absolute -bottom-24 -left-16 w-72 h-72 rounded-full opacity-20 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #D4A514 0%, transparent 70%)' }} />
+        <div className="relative max-w-3xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur text-xs uppercase tracking-wider font-medium">
+            <Activity size={14} /> Live snapshot
+          </div>
+          <h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight">
+            Current pricing logic — every category, team, and role.
+          </h1>
+          <p className="mt-4 text-base sm:text-lg text-white/80 max-w-2xl">
+            Where every Falcons price comes from today, why each segment sits where it sits, and what evolves
+            once Shikenso lands. Numbers fetched live from the engine — no stale screenshots.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Link href="/about" className="btn !py-2.5 !px-5 bg-white/10 hover:bg-white/15 text-white border border-white/20">
+              Methodology &amp; sources
+            </Link>
+            <Link href="/roadmap" className="btn !py-2.5 !px-5 bg-white/10 hover:bg-white/15 text-white border border-white/20">
+              See the roadmap <ArrowRight size={16} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Quick stats ─────────────────────────────────────────────── */}
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Active talent',     value: players.length.toString(),                  hint: 'Players + influencers + staff' },
+          { label: 'Creators',          value: creators.length.toString(),                  hint: 'Separate rate engine' },
+          { label: 'Distinct games',    value: games.length.toString(),                     hint: 'Across MLBB, CS2, CoD …' },
+          { label: 'Liquipedia-synced',     value: liquipediaSyncedCount.toString(),     hint: `${liquipediaWithUrlCount} have URL · ${liquipediaSyncedCount} have prize-money data` },
+        ].map(s => (
+          <div key={s.label} className="card card-p">
+            <div className="text-[11px] uppercase tracking-wider text-mute font-semibold">{s.label}</div>
+            <div className="text-3xl font-extrabold text-ink mt-1 tabular-nums">{s.value}</div>
+            <div className="text-xs text-label mt-1">{s.hint}</div>
+          </div>
+        ))}
+      </section>
+
+      {/* ─── Pricing readiness (Mig 059 + 062, May 5) ──────────────────── */}
+      <section className="card card-p border-2 border-greenDark/20">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-greenSoft text-greenDark flex items-center justify-center flex-shrink-0">
+            <ShieldCheck size={20} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl font-bold text-ink">Pricing readiness — locked stage</h2>
+              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-greenSoft text-greenDark font-bold">May 5 2026</span>
+            </div>
+            <p className="text-sm text-label mt-0.5">Agency-industry two-axis model — bookable status (binary) + profile strength (continuous %). Live from Supabase; recomputes on every page load.</p>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {(() => {
+            const all = [...players, ...creators] as any[];
+            const bookable = all.filter(r => r.is_bookable !== false).length;
+            const onHold   = all.filter(r => r.is_bookable === false).length;
+            const pct      = all.length ? Math.round((bookable / all.length) * 100) : 0;
+            const strengths = all.map(r => Number(r.profile_strength_pct ?? 0)).filter(n => Number.isFinite(n));
+            const avg = strengths.length ? Math.round(strengths.reduce((s, n) => s + n, 0) / strengths.length) : 0;
+            const strong = strengths.filter(n => n >= 70).length;
+            const mid    = strengths.filter(n => n >= 50 && n < 70).length;
+            const weak   = strengths.filter(n => n < 50).length;
+            const submitted = (players as any[]).filter(p => p.intake_status === 'submitted' || p.intake_status === 'revised').length;
+            const approved  = (players as any[]).filter(p => p.intake_status === 'approved').length;
+            return [
+              { v: pct + '%',       l: 'Bookable',         sub: bookable + ' of ' + all.length + ' active' },
+              { v: onHold.toString(), l: 'On hold',         sub: onHold === 0 ? 'no hard blockers' : 'needs source / market' },
+              { v: avg + '%',       l: 'Avg profile strength', sub: 'strong ' + strong + ' · mid ' + mid + ' · weak ' + weak },
+              { v: submitted.toString(), l: 'Awaiting approval', sub: approved + ' approved · gate live (Mig 062)' },
+            ].map(s => (
+              <div key={s.l} className="rounded-xl border border-line bg-bg/40 p-3">
+                <div className="text-[10px] text-mute uppercase tracking-wider font-bold">{s.l}</div>
+                <div className="text-3xl font-extrabold text-ink tabular-nums mt-1">{s.v}</div>
+                <div className="text-xs text-label mt-1">{s.sub}</div>
+              </div>
+            ));
+          })()}
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { n: 1, t: 'Talent submits', d: 'Per-deliverable floors via /talent/<token>. intake_status → submitted.' },
+            { n: 2, t: 'Admin approves', d: '/admin/talent-intakes Approve button. status → approved. One-click or with edits via Override.' },
+            { n: 3, t: 'Engine auto-applies', d: 'Calculator, QuoteBuilder, Configurator, Wizard all read floors immediately. priceController = talent_floor when active.' },
+          ].map(s => (
+            <div key={s.n} className="rounded-xl border border-line p-3">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-6 h-6 rounded-full bg-greenSoft text-greenDark text-xs font-bold grid place-items-center">{s.n}</span>
+                <div className="text-sm font-semibold text-ink">{s.t}</div>
+              </div>
+              <div className="text-xs text-label leading-relaxed">{s.d}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── Tier baselines (live) ───────────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gold/15 text-gold flex items-center justify-center flex-shrink-0">
+            <Layers size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">Tier baselines — what every IG Reel anchors to</h2>
+            <p className="text-sm text-label mt-0.5">
+              Today every player sits at their tier's <strong>floor</strong>. Within-tier spread (where Vejrgang ≠ Cellium even at the same tier)
+              is a Shikenso-phase calibration. Until then, tier &amp; championship-authority do the differentiation.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {tierStats.map(t => (
+            <div key={t.code} className="rounded-xl border border-line p-4 bg-bg/40">
+              <div className="text-[11px] uppercase tracking-wider font-bold text-label">{t.code}</div>
+              <div className="text-xs text-mute">{t.label}</div>
+              <div className="text-2xl font-extrabold text-ink mt-2 tabular-nums">
+                {t.avg_ig_reel ? fmtSar(t.avg_ig_reel) : '—'}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-mute mt-0.5">avg IG Reel today</div>
+              <div className="mt-3 pt-3 border-t border-line text-[11px] text-label">
+                {t.min_ig_reel > 0 ? (
+                  <>Today's range <strong className="text-ink">{fmtSar(t.min_ig_reel)}–{fmtSar(t.max_ig_reel)}</strong></>
+                ) : (
+                  <span className="italic text-mute">No live IG Reel rates yet</span>
+                )}
+              </div>
+              <div className="text-[11px] text-mute">
+                Median <strong className="text-label">{t.med_ig_reel > 0 ? fmtSar(t.med_ig_reel) : '—'}</strong>
+              </div>
+              <div className="text-[11px] text-label">Floor share <strong className="text-ink">{Math.round(t.floor_share * 100)}%</strong> of IRL</div>
+              <div className="text-[11px] text-label mt-1">
+                <span className="text-ink font-semibold">{t.count}</span> active talent
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+{/* ─── Regional pricing — market discount applied to base rates ─── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-gold/15 text-gold flex items-center justify-center flex-shrink-0">
+            <Globe size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">Regional market discount on base rates</h2>
+            <p className="text-sm text-label mt-0.5">
+              Methodology rates are calibrated to NA/EU prices. Local-market talents work at lower CPMs,
+              so their published base rate is discounted to reflect that. Discount is applied per talent
+              based on nationality — global anchors (NA/EU) keep full methodology.
+            </p>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-line">
+                <th className="py-2 pr-4 font-semibold text-label">Region</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Discount</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Tier S</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Tier 1</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Tier 2</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Tier 3</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Tier 4</th>
+                <th className="py-2 pr-4 font-semibold text-label">Why</th>
+              </tr>
+            </thead>
+            <tbody className="text-ink">
+              {[
+                { region: 'NA / EU / Global',  factor: 1.00, why: 'Methodology is calibrated here. Falcons NA/EU pros (m0NESY, ImperialHal, Vejrgang) bring global value.' },
+                { region: 'East Asia',         factor: 0.95, why: 'KR / JP / CN — premium markets but slightly under NA/EU on per-deal headline rates.' },
+                { region: 'GCC (non-KSA)',     factor: 0.85, why: 'UAE / Bahrain / Kuwait / Qatar / Oman — adjacent home market, slightly above KSA.' },
+                { region: 'KSA',               factor: 0.80, why: 'Saudi market — Falcons home base. Lower local CPMs than global, but still the premium MENA market.' },
+                { region: 'MENA broader',      factor: 0.80, why: 'Egypt / Levant / Maghreb — same band as KSA for lack of stronger pricing data.' },
+                { region: 'SEA',               factor: 0.55, why: 'Philippines / Indonesia / Vietnam / Thailand — significantly lower CPMs. PH macro influencers cap around PHP 80K (~SAR 5.4K).' },
+              ].map(r => {
+                const t = (mult: number) => fmtSar(40000 * r.factor * mult);
+                // Tier multipliers vs Tier S floor: S=1.0, 1=22000/40000=0.55, 2=11000/40000=0.275, 3=6500/40000=0.1625, 4=3000/40000=0.075
+                return (
+                  <tr key={r.region} className={`border-b border-line ${r.factor === 1.00 ? 'bg-greenSoft/30' : r.factor < 0.7 ? 'bg-amber/5' : ''}`}>
+                    <td className="py-2 pr-4 font-medium">{r.region}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums font-bold">
+                      {r.factor === 1.00 ? <span className="text-greenDark">×{r.factor.toFixed(2)}</span> : <span className="text-orange-700">×{r.factor.toFixed(2)}</span>}
+                    </td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{t(1.0)}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{t(0.55)}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{t(0.275)}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{t(0.1625)}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{t(0.075)}</td>
+                    <td className="py-2 pr-4 text-xs text-mute">{r.why}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 rounded-lg bg-bg/50 border border-line px-3 py-2 text-[11px] text-label leading-relaxed">
+          <strong className="text-ink">Note:</strong> the discount is on the talent's <em>published base rate</em>. At quote time, the audience axis can still bump prices up
+          when the brand's market is global (e.g., a US brand activating with KSA talent) — base rate × 0.80 (KSA) × 1.30 (audience: MENA→Global premium) recovers most of the methodology.
+          The two layers compose to give per-deal precision.
+        </div>
+      </section>
+
+      {/* ─── Floor-First pricing model (Migration 030, May 2 2026) ───── */}
+      <section className="card card-p border-2 border-green/50 bg-greenSoft/30">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-green text-white flex items-center justify-center flex-shrink-0">
+            <ShieldCheck size={20} />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl font-bold text-ink">Floor-First pricing model</h2>
+              <span className="text-[10px] uppercase tracking-wider font-bold bg-green text-white px-2 py-0.5 rounded">Live · May 2, 2026</span>
+            </div>
+            <p className="text-sm text-label mt-1">
+              Every talent's <code className="px-1 py-0.5 rounded bg-white border text-xs">base_rate_anchor</code> is the <strong>conservative defensible floor</strong>. Multipliers stack <strong>above</strong>; the engine never quotes below.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-green/30 bg-white p-4">
+            <div className="text-[10px] uppercase tracking-wider font-bold text-green mb-1.5">Why floor-first</div>
+            <p className="text-sm text-ink leading-relaxed">
+              The base IS the floor — kept conservative on purpose. Region, achievement, audience, engagement, content type, language, seasonality, confidence, rights — all multipliers stack on top. Sales reps push <strong>up</strong> with every defensible signal, never accidentally <strong>down</strong>.
+            </p>
+          </div>
+          <div className="rounded-lg border border-green/30 bg-white p-4">
+            <div className="text-[10px] uppercase tracking-wider font-bold text-green mb-1.5">How floor is computed</div>
+            <p className="text-sm text-ink leading-relaxed">
+              <code className="px-1 rounded bg-bg/40 text-xs">floor = MAX(tier×game, market_band_median, authority_capped)</code><br />
+              CPM-from-followers stays out of the base — that's anchor/stretch territory, captured in axis multipliers (audience quality, authority, etc.) at quote time.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-green/30 bg-white p-4">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-green mb-2">Three evidence methods (highest wins)</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="rounded border border-line p-3">
+              <strong className="text-ink">A. Tier × Game</strong>
+              <div className="text-label mt-1 leading-relaxed">tier_anchor × game_multiplier (SOT v1.0). The default floor for every talent.</div>
+            </div>
+            <div className="rounded border border-line p-3">
+              <strong className="text-ink">G. Market band</strong>
+              <div className="text-label mt-1 leading-relaxed">tier × audience_market median (KSA / MENA / Global). Captures regional premium where it exists.</div>
+            </div>
+            <div className="rounded border border-line p-3">
+              <strong className="text-ink">H. Authority (capped 1.20×)</strong>
+              <div className="text-label mt-1 leading-relaxed">peak Liquipedia tournament tier × decay × game_multiplier, hard-capped at 1.20× tier×game so champions get a modest lift, never a runaway.</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg bg-navy text-white p-4">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-gold mb-2">The formula</div>
+          <code className="block text-[12px] font-mono leading-relaxed text-white/90">
+            base_rate_anchor (DB) = floor = MAX(A, G, H_capped)<br />
+            quote_unit = base × eng × aud × seas × ctype × lang × auth_factor × confidence_cap × (1 + rights_pct)<br />
+            <strong className="text-gold">final_unit = MAX(quote_unit, base_rate_anchor)</strong>  &nbsp;&larr; floor enforcement, non-companion lines
+          </code>
+        </div>
+
+        <div className="mt-3 text-xs text-label">
+          Companion lines bypass floor enforcement (their fee is 0.5× solo by design).
+          Negotiated-card and manual-override rates keep their locked values regardless of floor methodology.
+          Re-query <code className="px-1 rounded bg-white border">player_floor_v3</code> any time to see the current evidence per talent.
+        </div>
+      </section>
+
+      {/* ─── Authority Tier (Migration 071) ──────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">🏆</div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-ink">Authority Tier · the tournament credentials side</h2>
+            <p className="text-sm text-label mt-0.5">Replaces the old single <code>achievement_decay_factor</code> with a 6-tier classification derived from peak tournament tier × placement × recency. Drives both anchor premium and floor decay.</p>
+
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-sm border border-line rounded-lg overflow-hidden">
+                <thead className="bg-bg">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold">Tier</th>
+                    <th className="text-left px-3 py-2 font-semibold">Definition</th>
+                    <th className="text-right px-3 py-2 font-semibold">Anchor lift</th>
+                    <th className="text-right px-3 py-2 font-semibold">Floor decay</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  <tr className="bg-amber-50"><td className="px-3 py-2 font-bold text-amber-900">🏆 AT-1 World Champion</td><td className="px-3 py-2">Tier-S 1st-place finish within last 12 months</td><td className="px-3 py-2 text-right tabular-nums font-bold">×1.40</td><td className="px-3 py-2 text-right tabular-nums">1.20</td></tr>
+                  <tr><td className="px-3 py-2 font-bold">🥈 AT-2 Major Finalist</td><td className="px-3 py-2">Tier-S top-2 in 18mo or 1st 13–24mo old</td><td className="px-3 py-2 text-right tabular-nums">×1.20</td><td className="px-3 py-2 text-right tabular-nums">1.10</td></tr>
+                  <tr><td className="px-3 py-2">⭐ AT-3 Tier-1 Active</td><td className="px-3 py-2">Tier-S any placement within 18mo</td><td className="px-3 py-2 text-right tabular-nums">×1.10</td><td className="px-3 py-2 text-right tabular-nums">1.00</td></tr>
+                  <tr><td className="px-3 py-2">AT-4 Active Pro</td><td className="px-3 py-2">Tier-A or Tier-S 18–24mo since major</td><td className="px-3 py-2 text-right tabular-nums">×1.00</td><td className="px-3 py-2 text-right tabular-nums">0.90</td></tr>
+                  <tr><td className="px-3 py-2">AT-5 Emerging</td><td className="px-3 py-2">Tier-B / Tier-C / unrated with some signal</td><td className="px-3 py-2 text-right tabular-nums">×0.95</td><td className="px-3 py-2 text-right tabular-nums">0.85</td></tr>
+                  <tr><td className="px-3 py-2 text-mute">AT-0 No Signal</td><td className="px-3 py-2 text-mute">No Liquipedia URL / no peak_tier — coach / content-only / new signing</td><td className="px-3 py-2 text-right tabular-nums">×1.00</td><td className="px-3 py-2 text-right tabular-nums">1.00</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-3 text-xs text-label leading-relaxed">
+              <p><strong>How AT is computed (Mig 071):</strong> auto-derived from <code>peak_tournament_tier</code> · <code>last_major_placement</code> · <code>last_major_finish_date</code> · <code>liquipedia_url</code>. 12-month recency for AT-1 — esports cycles fast and yesterday&apos;s champion is yesterday&apos;s news commercially.</p>
+              <p className="mt-2"><strong>Override path:</strong> when the Liquipedia scraper misses (e.g. NiKo classified low because his most recent BLAST Major isn&apos;t parsing), admin sets <code>authority_tier_override</code> on the player edit page. Engine reads <code>coalesce(override, auto)</code>.</p>
+              <p className="mt-2"><strong>AT-0 fix (Mig 077):</strong> 59 talents (coaches, content-only) previously took an unjustified 50% haircut. Now neutral 1.00 — they don&apos;t earn a championship premium but they don&apos;t get penalized for missing one either.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Archetype × Profile (Migration 074) ─────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center flex-shrink-0"><Layers size={20} /></div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-ink">Archetype × Profile · the commercial-value side</h2>
+            <p className="text-sm text-label mt-0.5">8 archetypes from the 2-axis grid (Competitive Pedigree × Content Profile) plus 8 capability flags. Caps which axes carry weight per talent type, gates which deliverables are even quotable.</p>
+
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-xs border border-line rounded-lg overflow-hidden">
+                <thead className="bg-bg">
+                  <tr>
+                    <th className="text-left px-2 py-2 font-semibold">Archetype</th>
+                    <th className="text-left px-2 py-2 font-semibold">Brand pitch</th>
+                    <th className="text-right px-2 py-2 font-semibold">Auth cap</th>
+                    <th className="text-right px-2 py-2 font-semibold">Eng cap</th>
+                    <th className="text-right px-2 py-2 font-semibold">Aud cap</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  <tr><td className="px-2 py-2 font-semibold">World-Class Pro</td><td className="px-2 py-2">Best-in-the-world credibility — NiKo, Peterbot</td><td className="px-2 py-2 text-right tabular-nums">1.40</td><td className="px-2 py-2 text-right tabular-nums">1.30</td><td className="px-2 py-2 text-right tabular-nums">1.50</td></tr>
+                  <tr><td className="px-2 py-2 font-semibold">Established Pro</td><td className="px-2 py-2">Major-finalist · Cellium, m0NESY, kyousuke</td><td className="px-2 py-2 text-right tabular-nums">1.30</td><td className="px-2 py-2 text-right tabular-nums">1.30</td><td className="px-2 py-2 text-right tabular-nums">1.40</td></tr>
+                  <tr><td className="px-2 py-2 font-semibold">Regional Pro</td><td className="px-2 py-2">MENA/APAC scene leader · madv, FlapTzy</td><td className="px-2 py-2 text-right tabular-nums">1.20</td><td className="px-2 py-2 text-right tabular-nums">1.40</td><td className="px-2 py-2 text-right tabular-nums">1.40</td></tr>
+                  <tr><td className="px-2 py-2 font-semibold">Esports Personality</td><td className="px-2 py-2">Plays + casts + commentates · Abo Najd, Bijw</td><td className="px-2 py-2 text-right tabular-nums">1.10</td><td className="px-2 py-2 text-right tabular-nums">1.50</td><td className="px-2 py-2 text-right tabular-nums">1.40</td></tr>
+                  <tr><td className="px-2 py-2 font-semibold">Hybrid Lifestyle</td><td className="px-2 py-2">MENA cinematic + esports cred · Moaz</td><td className="px-2 py-2 text-right tabular-nums text-mute">1.00</td><td className="px-2 py-2 text-right tabular-nums">1.60</td><td className="px-2 py-2 text-right tabular-nums">1.50</td></tr>
+                  <tr><td className="px-2 py-2 font-semibold">Grassroots Competitor</td><td className="px-2 py-2">Active MENA competitive · Spy, Cuffin, KERORO</td><td className="px-2 py-2 text-right tabular-nums">1.10</td><td className="px-2 py-2 text-right tabular-nums">1.40</td><td className="px-2 py-2 text-right tabular-nums">1.30</td></tr>
+                  <tr><td className="px-2 py-2 font-semibold">Tournament Athlete</td><td className="px-2 py-2">FGC pros · Atif Butt, Farzeen — auth + IRL only</td><td className="px-2 py-2 text-right tabular-nums">1.40</td><td className="px-2 py-2 text-right tabular-nums text-mute">1.00</td><td className="px-2 py-2 text-right tabular-nums text-mute">1.00</td></tr>
+                  <tr><td className="px-2 py-2 font-semibold">Pure Lifestyle Creator</td><td className="px-2 py-2">Saudi cinematic creators — gaming-adjacent</td><td className="px-2 py-2 text-right tabular-nums text-mute">1.00</td><td className="px-2 py-2 text-right tabular-nums">1.60</td><td className="px-2 py-2 text-right tabular-nums">1.40</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-3 text-xs text-label">
+              <p><strong>How it works in the engine:</strong> per-archetype caps are MIN-applied to the existing axis multipliers. A Tournament Athlete&apos;s engagement axis can&apos;t exceed 1.00 even if sales tries to push it — the engine clamps it. A World-Class Pro&apos;s authority axis can hit 1.40 (the full premium).</p>
+              <p className="mt-2"><strong>8 profile capability flags</strong> (per talent): stream_intensity 0–3 · content_intensity 0–3 · solo_video bool · cinematic_ready bool · irl_availability none/saudi_only/mena/apac/global · peak_platforms text[] · bilingual bool · agency_status. These gate which deliverables are quotable — NiKo&apos;s Twitch is hidden if his stream_intensity = 0.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Confidence cap mechanics ─────────────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0"><AlertTriangle size={20} /></div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-ink">Confidence cap · pricing uncertainty honestly</h2>
+            <p className="text-sm text-label mt-0.5">When the underlying data is thin, the engine refuses to claim a high confidence number. 4 levels with associated haircuts and axis caps.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              <div className="rounded-lg border border-greenDark/30 bg-greenSoft/40 p-3">
+                <div className="text-xs uppercase tracking-wider text-greenDark font-bold">High</div>
+                <div className="text-xs text-label mt-1">Recent closed deal · verified audience · known rate source · matching deliverable history</div>
+                <div className="text-[10px] text-mute mt-1">No haircut. All axis caps 100% available.</div>
+              </div>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                <div className="text-xs uppercase tracking-wider text-amber-700 font-bold">Medium</div>
+                <div className="text-xs text-label mt-1">Tier baseline + market reference + partial platform metrics</div>
+                <div className="text-[10px] text-mute mt-1">5% haircut. Authority axis capped at 1.30 (no full World-Champion premium without verified data).</div>
+              </div>
+              <div className="rounded-lg border border-orange-300 bg-orange-50 p-3">
+                <div className="text-xs uppercase tracking-wider text-orange-700 font-bold">Low</div>
+                <div className="text-xs text-label mt-1">Manual rate · stale snapshot · missing engagement or demographic data</div>
+                <div className="text-[10px] text-mute mt-1">15% haircut. Engagement + Audience axes capped at 1.20.</div>
+              </div>
+              <div className="rounded-lg border border-rose-300 bg-rose-50 p-3">
+                <div className="text-xs uppercase tracking-wider text-rose-700 font-bold">Speculative</div>
+                <div className="text-xs text-label mt-1">New player · no market data · no historical deal data</div>
+                <div className="text-[10px] text-mute mt-1">25% haircut. All axes pinned at 1.00 — engine refuses to push price up without evidence.</div>
+              </div>
+            </div>
+            <p className="text-xs text-label mt-3">A low-confidence $20k quote is treated differently from a high-confidence $20k quote — sales should mention this when defending the price to a brand. The chip on every Quick Estimate page shows the score + reasons.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Approval gates + governance ──────────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center flex-shrink-0"><ShieldCheck size={20} /></div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-ink">Approval gates · margin protection at the API layer</h2>
+            <p className="text-sm text-label mt-0.5">5 hard gates in <code>/api/quote</code> POST that block save when the quote crosses thresholds without proper authorization. Sales sees a 403 with a structured code; QuoteBuilder surfaces it inline.</p>
+
+            <ul className="space-y-2 mt-4 text-sm">
+              <li className="rounded-lg border border-line bg-bg/40 p-3">
+                <code className="text-xs">APPROVAL_REQUIRED_DISCOUNT</code><br/>
+                <strong className="text-ink">Discount &gt; 25%</strong> — requires Commercial + Finance approval. Block bypassed only by <code>profile.role = &apos;admin&apos;</code>.
+              </li>
+              <li className="rounded-lg border border-line bg-bg/40 p-3">
+                <code className="text-xs">APPROVAL_REQUIRED_PERPETUAL_RIGHTS</code><br/>
+                <strong className="text-ink">Perpetual rights</strong> (rights_term_months ≥ 999) — requires Legal + executive approval.
+              </li>
+              <li className="rounded-lg border border-line bg-bg/40 p-3">
+                <code className="text-xs">FLOOR_OVERRIDE_REQUIRED</code><br/>
+                <strong className="text-ink">Line below 50% of base_rate</strong> — blocks save unless <code>header.floor_override_reason</code> is set with a human explanation. Auditable.
+              </li>
+              <li className="rounded-lg border border-line bg-bg/40 p-3">
+                <code className="text-xs">RIGHTS_TERRITORY_REQUIRED</code> <em className="text-mute text-[10px]">(Mig 078)</em><br/>
+                <strong className="text-ink">Paid usage / exclusivity without territory</strong> — undefined territory = open exclusivity = future legal liability. Brief tab now has a required dropdown.
+              </li>
+              <li className="rounded-lg border border-line bg-bg/40 p-3">
+                <code className="text-xs">COMPETITOR_BLACKOUT_REQUIRED</code> <em className="text-mute text-[10px]">(Mig 078)</em><br/>
+                <strong className="text-ink">Exclusivity = true without competitor list</strong> — must name the competitor brands blocked, otherwise the legal scope is undefined.
+              </li>
+            </ul>
+
+            <p className="text-xs text-label mt-3">Every blocked save writes to <code>audit_log</code> with the actor + reason + diff. The <Link href="/admin/audit-log" className="text-greenDark hover:underline">audit log</Link> is the source of truth for "who tried to push past the gate."</p>
+          </div>
+        </div>
+      </section>
+
+
+      {/* ─── By game ─────────────────────────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-greenSoft text-greenDark flex items-center justify-center flex-shrink-0">
+            <Trophy size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">By game discipline</h2>
+            <p className="text-sm text-label mt-0.5">
+              Average IG Reel per game = function of how Tier S/1 the roster is for that title. PUBG and Chess average highest because Falcons holds genuine global anchors there;
+              Fatal Fury / Tekken sit lower because the roster is exclusively T2/T3 (no Tier S).
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-line">
+                <th className="py-2 pr-4 font-semibold text-label">Game</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Talent</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Avg IG Reel</th>
+                <th className="py-2 pr-4 font-semibold text-label">Tiers present</th>
+              </tr>
+            </thead>
+            <tbody className="text-ink">
+              {games.slice(0, 14).map(g => (
+                <tr key={g.game} className="border-b border-line">
+                  <td className="py-2 pr-4 font-medium">{g.game}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-label">{g.count}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums">{fmtSar(g.avg)} <span className="text-xs text-mute">· {fmtUsd(g.avg)}</span></td>
+                  <td className="py-2 pr-4 text-xs text-mute">{g.tiers.join(' · ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ─── By team / sub-roster ────────────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-navy/10 text-navy flex items-center justify-center flex-shrink-0">
+            <Users size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">By team / sub-roster</h2>
+            <p className="text-sm text-label mt-0.5">
+              <strong>Riyadh Falcons</strong> is the highest-priced sub-roster because it's where the Tier S Apex/CoD anchors live.
+              <strong>Team Falcons MENA</strong> and <strong>Falcons Vega MENA</strong> sit lower because they're the developmental rosters. Sub-roster doesn't change pricing — tier does — but it explains the averages.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-line">
+                <th className="py-2 pr-4 font-semibold text-label">Team / Sub-roster</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Talent</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Avg IG Reel</th>
+                <th className="py-2 pr-4 font-semibold text-label">Tiers</th>
+              </tr>
+            </thead>
+            <tbody className="text-ink">
+              {teams.slice(0, 12).map(t => (
+                <tr key={t.team} className="border-b border-line">
+                  <td className="py-2 pr-4 font-medium">{t.team}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-label">{t.count}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums">{fmtSar(t.avg)}</td>
+                  <td className="py-2 pr-4 text-xs text-mute">{t.tiers.join(' · ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ─── By region / market context ──────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gold/15 text-gold flex items-center justify-center flex-shrink-0">
+            <Globe size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">By region — and why pricing isn't one-size-fits-all</h2>
+            <p className="text-sm text-label mt-0.5">
+              The base rate is the same across all regions today — but client market context changes what that rate is worth. Filipino macro-influencers
+              (100K-1M followers) command PHP 20K–100K per post (~SAR 1.3K–6.7K). MENA macro-influencers command 3-4× that. The same player priced
+              for a Filipino brand vs a Saudi brand should reflect that gap.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-line">
+                <th className="py-2 pr-4 font-semibold text-label">Region</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Talent</th>
+                <th className="py-2 pr-4 font-semibold text-label text-right">Avg IG Reel</th>
+                <th className="py-2 pr-4 font-semibold text-label">Pricing context</th>
+              </tr>
+            </thead>
+            <tbody className="text-ink">
+              {regions.map(r => {
+                const ctx: Record<string, string> = {
+                  'KSA': 'Home market · MENA premium audience axis active (1.30×)',
+                  'GCC (non-KSA)': 'Adjacent home market · GCC = MENA-tier pricing',
+                  'MENA broader': 'Egypt/Levant — slightly below GCC, audience 1.20×',
+                  'SEA': 'Local SEA brand context = audience 0.65× (planned). Currently same as KSA — overpriced for PH/ID.',
+                  'East Asia': 'KR/JP/CN — premium markets, audience 1.15×',
+                  'NA / EU': 'Tier 1 esports markets — audience 1.00–1.20×',
+                  'Other / Unspecified': 'Nationality not yet captured. Defaults to MENA pricing.',
+                };
+                return (
+                  <tr key={r.region} className="border-b border-line">
+                    <td className="py-2 pr-4 font-medium">{r.region}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums text-label">{r.count}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{fmtSar(r.avg)}</td>
+                    <td className="py-2 pr-4 text-xs text-mute">{ctx[r.region] || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 rounded-lg border border-amber/40 bg-amber/5 px-4 py-3 text-sm">
+          <div className="flex items-start gap-2 text-amber">
+            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+            <div>
+              <strong className="block text-ink">Open gap:</strong>
+              <span className="text-label">SEA-local audience tier (proposed 0.65×) isn't in the engine yet. Until then, sales must manually drop the audience axis to <em>Generic / Broad</em> (0.85×) when quoting Filipino/Indonesian brands — still 30%+ overpriced. Adding a dedicated SEA-local option to the audience axis is next on the roadmap.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Roles ──────────────────────────────────────────────── */}
+      <section className="grid grid-cols-1 lg:grid-cols-[1.4fr,1fr] gap-6">
+        <div className="card card-p">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-greenSoft text-greenDark flex items-center justify-center flex-shrink-0">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-ink">How non-Players are priced</h2>
+              <p className="text-sm text-label mt-0.5">
+                Coaches, managers, analysts, and influencers all use the same tier-driven base rate. The intent: pricing reflects <em>brand value to the buying client</em>, not in-game KDA.
+                A team manager with 80K followers commands the same Tier 2 rate as a player with 80K followers — both deliver the same audience.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {Object.entries(byRole).sort((a,b) => b[1] - a[1]).slice(0, 6).map(([role, count]) => (
+              <div key={role} className="rounded-lg border border-line bg-bg/40 p-3">
+                <div className="text-xs text-mute uppercase tracking-wider font-semibold">{role}</div>
+                <div className="text-2xl font-bold text-ink tabular-nums mt-1">{count}</div>
+                <div className="text-[10px] uppercase tracking-wider text-mute">active</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card card-p bg-navy text-white border-navy">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-white/10 text-gold flex items-center justify-center flex-shrink-0">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Creators (separate engine)</h2>
+              <p className="text-sm text-white/70 mt-0.5">17 creators. Different platform menu, same formula.</p>
+            </div>
+          </div>
+          <ul className="mt-5 space-y-2.5 text-sm text-white/85">
+            <li className="flex items-start gap-2"><Trophy size={14} className="text-gold flex-shrink-0 mt-0.5" /> All Tier 1 / Tier S — premium-only roster</li>
+            <li className="flex items-start gap-2"><Trophy size={14} className="text-gold flex-shrink-0 mt-0.5" /> Audience axis = sector match (Sports / Tech / Anime / KSA / MENA)</li>
+            <li className="flex items-start gap-2"><Trophy size={14} className="text-gold flex-shrink-0 mt-0.5" /> Authority axis = conversion-driven (Trusted niche / Hero) instead of championship</li>
+            <li className="flex items-start gap-2"><Trophy size={14} className="text-gold flex-shrink-0 mt-0.5" /> Production axis replaces Seasonality (creators don't have tournament cycles)</li>
+            <li className="flex items-start gap-2"><Trophy size={14} className="text-gold flex-shrink-0 mt-0.5" /> Manual archetypes available — Lifestyle / Day-in-Life / Brand Ambassador packages</li>
+          </ul>
+        </div>
+      </section>
+
+      {/* ─── Reasoning ──────────────────────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-navy/10 text-navy flex items-center justify-center flex-shrink-0">
+            <BookOpen size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">Why it's built this way</h2>
+            <p className="text-sm text-label mt-0.5">Five design choices that explain every line you'll see in a quote.</p>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { title: 'Tier-anchored, not per-talent', icon: Layers,
+              body: 'Every player in a tier gets the same IG Reel anchor today. Why: until Shikenso, manual per-talent calibration drifts and creates negotiation chaos. Floor first, calibration later.' },
+            { title: 'Authority Floor protects pros', icon: ShieldCheck,
+              body: 'Pro player social rate = MAX(SocialPrice, IRL × FloorShare × axes). A world-champ with modest social reach is never priced below their appearance value. Locked in computeLine().' },
+            { title: 'Confidence cap = guardrail', icon: AlertTriangle,
+              body: '184 of 185 talent at "rounded" (TBV via Shikenso — manually verified). Premiums active, no haircut. The 1 "exact" + the rest will be reset to graded confidence as Shikenso onboards.' },
+            { title: 'Cross-platform ratios are uniform', icon: TrendingUp,
+              body: 'IG Static 65% · TikTok 78% · YT Short 32% · Twitch 2h 145% · IRL 220% — same across every tier. Set the IG Reel anchor right and every other platform falls into place automatically.' },
+            { title: 'Regional context via the audience axis', icon: Globe,
+              body: 'Same player priced different per market: MENA campaign = 1.30× audience; SEA local = 0.65× (proposed). Adjusts price to the client\'s market — not the player\'s nationality.' },
+            { title: 'Championship credentials via authority_factor', icon: Trophy,
+              body: 'Per-talent intrinsic Authority. M5 / EWC / Worlds champion = 1.50× by default. Currently 1.0× for everyone (rolled back pending the SEA audience tier — would have over-priced PH champions).' },
+          ].map(r => {
+            const Icon = r.icon;
+            return (
+              <div key={r.title} className="rounded-lg border border-line bg-bg/40 p-4">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Icon size={16} className="text-greenDark" />
+                  <h3 className="font-semibold text-ink text-sm">{r.title}</h3>
+                </div>
+                <p className="text-xs text-label leading-relaxed">{r.body}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ─── Confidence distribution snapshot ───────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-greenSoft text-greenDark flex items-center justify-center flex-shrink-0">
+            <ShieldCheck size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">Where the data quality stands today</h2>
+            <p className="text-sm text-label mt-0.5">
+              Every talent is tagged with measurement_confidence. The engine uses this to gate premium multipliers + apply a haircut.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {(['exact','rounded','estimated','pending'] as const).map(k => {
+            const labels: Record<string, { name: string; what: string; tone: string }> = {
+              exact:     { name: 'Verified',        what: 'Shikenso confirmed',                        tone: 'border-green/40 bg-greenSoft text-greenDark' },
+              rounded:   { name: 'TBV (manual)',    what: 'Manually verified · premiums active',       tone: 'border-gold/40 bg-gold/5 text-gold' },
+              estimated: { name: 'Estimated',       what: 'Partial data · capped premiums',            tone: 'border-navy/30 bg-navy/5 text-navy' },
+              pending:   { name: 'Pending',         what: 'No data · 1.0× cap + 25% haircut',          tone: 'border-line bg-bg text-label' },
+            };
+            const l = labels[k];
+            const count = confidenceCounts[k] || 0;
+            return (
+              <div key={k} className={`rounded-xl border ${l.tone} p-4`}>
+                <div className="text-[11px] uppercase tracking-wider font-bold">{l.name}</div>
+                <div className="text-3xl font-extrabold tabular-nums mt-1">{count}</div>
+                <div className="text-[11px] mt-1">{l.what}</div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ─── Evolution ──────────────────────────────────────────────── */}
+      <section className="card card-p">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gold/15 text-gold flex items-center justify-center flex-shrink-0">
+            <Compass size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-ink">How the logic evolves from here</h2>
+            <p className="text-sm text-label mt-0.5">Three immediate moves, then steady-state Shikenso.</p>
+          </div>
+        </div>
+        <div className="mt-5 space-y-3">
+          {[
+            { phase: 'Next', title: 'SEA-local audience tier', detail: 'Add audience option 0.65× for Filipino / Indonesian / Vietnamese local-brand campaigns. Unlocks correct PH market pricing for FlapTzy / Hadji / Vega SEA roster.', tone: 'border-green/40 bg-greenSoft' },
+            { phase: 'Next', title: 'Re-apply M5 championship Authority (1.50×)', detail: 'Once SEA audience tier is live, the 6 M5 World Champions get authority_factor = 1.50 again. SEA campaigns: 0.65 × 1.50 ≈ 0.975× — premium but defensible. KSA campaigns: 1.30 × 1.50 = 1.95× — proper export premium.', tone: 'border-green/40 bg-greenSoft' },
+            { phase: 'Soon', title: 'Tier mid-band lift', detail: 'Move every tier from floor → mid of range (T S 40K → 45K, T1 22K → 26K, T2 11K → 14.5K). Defensible — still inside published tier ranges. ~20% revenue uplift across the board.', tone: 'border-gold/40 bg-gold/5' },
+            { phase: 'Soon', title: 'Backfill nationality for "Other / Unspecified"', detail: '76 talents in the roster have no nationality — they all default to MENA pricing context. Filling this in unlocks correct regional adjustments at quote time.', tone: 'border-gold/40 bg-gold/5' },
+            { phase: 'Q3 2026', title: 'Shikenso integration → per-talent calibration', detail: 'Within-tier spread starts: top of Tier S (Vejrgang, ImperialHal, NiKo at 50K) vs entry of Tier S (newer signings at 40K). Engagement + audience multipliers become data-driven per talent. Confidence promotes from rounded → exact en masse.', tone: 'border-navy/30 bg-navy/5' },
+            { phase: 'Q4 2026 →', title: 'Move to middle of global pack', detail: 'Once Shikenso data backs up the case, push Tier 1 IG Reel toward $9–12K USD (SAR 35–45K) — between Cloud9 and 100 Thieves. Falcons is a 3× EWC champion; bottom-of-pack pricing is no longer defensible.', tone: 'border-navy/30 bg-navy/5' },
+          ].map((e, i) => (
+            <div key={i} className={`rounded-xl border-2 ${e.tone} p-4`}>
+              <div className="flex items-center gap-3">
+                <div className="text-[10px] uppercase tracking-wider font-bold text-label px-2 py-0.5 rounded-full bg-white border border-line">
+                  {e.phase}
+                </div>
+                <h3 className="font-bold text-ink text-sm">{e.title}</h3>
+              </div>
+              <p className="text-xs text-label mt-2 leading-relaxed">{e.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── Quick links ───────────────────────────────────────────── */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Link href="/quote/new" className="card card-p hover:shadow-lift transition group">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-green text-white flex items-center justify-center"><Calculator size={20} /></div>
+            <div>
+              <div className="font-bold text-ink group-hover:text-greenDark transition">Apply this in a quote</div>
+              <div className="text-xs text-label">Build now with these multipliers</div>
+            </div>
+            <ArrowRight size={16} className="ml-auto text-mute group-hover:text-greenDark transition" />
+          </div>
+        </Link>
+        <Link href="/admin/pricing" className="card card-p hover:shadow-lift transition group">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-navy text-white flex items-center justify-center"><GitBranch size={20} /></div>
+            <div>
+              <div className="font-bold text-ink group-hover:text-navy transition">Pricing OS (admin)</div>
+              <div className="text-xs text-label">Edit axes, KB, defaults</div>
+            </div>
+            <ArrowRight size={16} className="ml-auto text-mute group-hover:text-navy transition" />
+          </div>
+        </Link>
+        <Link href="/admin/assumptions" className="card card-p hover:shadow-lift transition group">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gold text-white flex items-center justify-center"><BookOpen size={20} /></div>
+            <div>
+              <div className="font-bold text-ink group-hover:text-gold transition">Assumptions log</div>
+              <div className="text-xs text-label">Every default + revisit trigger</div>
+            </div>
+            <ArrowRight size={16} className="ml-auto text-mute group-hover:text-gold transition" />
+          </div>
+        </Link>
+      </section>
+
+      {/* ─── Footer ───────────────────────────────────────────────── */}
+      <p className="text-xs text-mute text-center leading-relaxed px-4">
+        Live snapshot · Currency display: SAR (1 USD = 3.75 SAR) · Counts and averages refresh on every page load · Confidential — Internal Use Only
+      </p>
+    </div>
+  );
+}

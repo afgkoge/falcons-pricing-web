@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+
+  /* Light theme — semantic tokens. Values are 'r g b' so Tailwind alpha works. */
+  --color-navy:        11 35 64;
+  --color-navy-dark:   6 22 40;
+  --color-green:       46 208 110;
+  --color-green-dark:  38 166 87;
+  --color-green-soft:  233 249 238;
+  --color-gold:        212 165 20;
+  --color-ink:         34 44 59;
+  --color-label:       90 102 120;
+  --color-mute:        148 163 184;
+  --color-line:        228 232 238;
+  --color-bg:          247 249 251;
+  --color-danger:      229 57 53;
+  --color-amber:       247 181 0;
+
+  /* Misc surface tones used directly */
+  --surface-card:        255 255 255;     /* card body */
+  --surface-card-hover:  248 250 252;
+  --surface-elevated:    255 255 255;
+}
+
+html[data-theme="dark"] {
+  /* Dark theme — keep brand greens and amber intact, invert surfaces and ink. */
+  --color-navy:        16 23 42;          /* slate-950-ish, used for sidebar still */
+  --color-navy-dark:   8 12 24;
+  --color-green:       46 208 110;
+  --color-green-dark:  38 166 87;
+  --color-green-soft:  18 56 36;          /* deep green tint for hovers */
+  --color-gold:        212 165 20;
+  --color-ink:         226 232 240;       /* slate-200 */
+  --color-label:       148 163 184;       /* slate-400 */
+  --color-mute:        100 116 139;       /* slate-500 */
+  --color-line:        51 65 85;          /* slate-700 — borders */
+  --color-bg:          15 23 42;          /* slate-900 — page bg */
+  --color-danger:      248 113 113;
+  --color-amber:       251 191 36;
+
+  --surface-card:        30 41 59;        /* slate-800 — card body */
+  --surface-card-hover:  51 65 85;
+  --surface-elevated:    30 41 59;
+}
+
+html, body {
+  font-family: var(--font-sans);
+  background: rgb(var(--color-bg));
+  color: rgb(var(--color-ink));
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dark-mode card surface uses --surface-card (not --color-bg) so cards float above the page */
+html[data-theme="dark"] .card { background-color: rgb(var(--surface-card)); }
+html[data-theme="dark"] .input { background-color: rgb(var(--surface-card)); }
+html[data-theme="dark"] .btn-ghost { background-color: rgb(var(--surface-card)); }
+html[data-theme="dark"] select.input,
+html[data-theme="dark"] textarea.input { background-color: rgb(var(--surface-card)); }
+
+/* Soft white backgrounds in light mode become subtle surface in dark */
+html[data-theme="dark"] .bg-white { background-color: rgb(var(--surface-card)) !important; }
+
+/* Smooth fade when toggling the theme */
+html, body, .card, .input, .btn { transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease; }
+
+button { cursor: pointer; }
+
+/* ─── card utility ─────────────────────────────────────────────────────── */
+.card    { @apply bg-white rounded-xl border border-line shadow-card; }
+.card-p  { @apply p-5; }
+
+/* ─── buttons ──────────────────────────────────────────────────────────── */
+.btn         { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition; }
+.btn-primary { @apply bg-green text-white hover:bg-greenDark; }
+.btn-ghost   { @apply bg-transparent border border-line text-ink hover:bg-bg; }
+.btn-navy    { @apply bg-navy text-white hover:bg-navyDark; }
+.btn-danger  { @apply bg-danger text-white hover:opacity-90; }
+
+/* ─── form atoms ───────────────────────────────────────────────────────── */
+.input { @apply w-full px-3 py-2 rounded-lg border border-line bg-white text-sm text-ink placeholder:text-mute focus:outline-none focus:ring-2 focus:ring-green/40 focus:border-green; }
+.label { @apply text-xs font-medium uppercase tracking-wide text-label mb-1 block; }
+
+/* ─── chips (status, badges) ───────────────────────────────────────────── */
+.chip       { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap; }
+.chip-gold  { @apply bg-gold/15 text-gold; }
+.chip-mint  { @apply bg-green/15 text-greenDark; }
+.chip-peach { @apply bg-amber/20 text-amber; }
+.chip-sky   { @apply bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300; }
+.chip-grey  { @apply bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300; }
+
+/* Status hierarchy: pending/rejected demand attention; closed states recede. */
+.status            { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide; }
+.status-strong     { @apply ring-1 ring-amber/40; }
+.status-loud       { @apply ring-1 ring-red-300; animation: pulse-soft 2.4s ease-in-out infinite; }
+.status-mute       { @apply opacity-70; }
+
+.status-draft            { @apply bg-slate-100 text-slate-600; }
+.status-pending_approval { @apply bg-amber/20 text-amber status-strong; }
+.status-approved         { @apply bg-green/15 text-greenDark; }
+.status-sent_to_client   { @apply bg-blue-100 text-blue-700; }
+.status-client_approved  { @apply bg-green/20 text-greenDark; }
+.status-client_rejected  { @apply bg-red-100 text-red-700 status-loud; }
+.status-closed_won       { @apply bg-green/15 text-greenDark status-mute; }
+.status-closed_lost      { @apply bg-slate-100 text-slate-500 status-mute; }
+
+@keyframes pulse-soft {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.45); }
+  50%      { box-shadow: 0 0 0 5px rgba(229, 57, 53, 0); }
+}
+
+/* ─── tier chips ───────────────────────────────────────────────────────── */
+.tier-S { @apply bg-gold/15 text-gold border-gold/40; }
+.tier-1 { @apply bg-green/15 text-greenDark border-green/40; }
+.tier-2 { @apply bg-amber/15 text-amber border-amber/40; }
+.tier-3 { @apply bg-blue-100 text-blue-700 border-blue-200; }
+.tier-4 { @apply bg-slate-100 text-slate-600 border-slate-200; }
+
+/* ─── data tables (zebra + sticky header + density) ────────────────────── */
+.data-table              { @apply w-full text-sm; }
+.data-table thead th     { @apply text-left text-[11px] text-label uppercase tracking-wider bg-bg sticky top-0 z-10 px-4 py-2.5 font-semibold border-b border-line; }
+.data-table tbody tr     { @apply border-b border-line transition-colors; }
+/* Striping uses theme-aware tokens. Hardcoded RGBA values were the cause of
+ * the 'ghosted rows' bug in dark mode — pale-on-dark looked semi-transparent. */
+.data-table tbody tr:hover { background-color: rgb(var(--surface-card-hover)); }
+.data-table tbody tr:nth-child(even) { background-color: rgb(var(--surface-card)); }
+.data-table tbody tr:nth-child(even):hover { background-color: rgb(var(--surface-card-hover)); }
+html[data-theme="dark"] .data-table tbody tr:hover,
+html[data-theme="dark"] .data-table tbody tr:nth-child(even):hover { background-color: rgb(var(--surface-card-hover)); }
+.data-table tbody td     { @apply px-4 py-2.5 align-middle; }
+
+.data-table.density-compact tbody td,
+.data-table.density-compact thead th { @apply py-1.5; }
+.data-table.density-comfortable tbody td,
+.data-table.density-comfortable thead th { @apply py-3; }
+.data-table.density-spacious tbody td,
+.data-table.density-spacious thead th { @apply py-4; }
+
+.row-actions { @apply opacity-0 transition-opacity; }
+.data-table tbody tr:hover .row-actions,
+.data-table tbody tr:focus-within .row-actions { @apply opacity-100; }
+
+/* ─── KPI / stat cards ─────────────────────────────────────────────────── */
+.kpi          { @apply card p-5 flex flex-col gap-1 relative overflow-hidden; }
+.kpi-label    { @apply text-[11px] uppercase tracking-wider text-label font-medium; }
+.kpi-value    { @apply text-3xl md:text-4xl font-extrabold text-ink leading-none tracking-tight; }
+.kpi-sub      { @apply text-xs text-mute; }
+.kpi-accent   { @apply absolute right-4 top-4 w-9 h-9 rounded-lg bg-green/10 text-greenDark grid place-items-center; }
+
+/* ─── breadcrumbs ──────────────────────────────────────────────────────── */
+.crumbs       { @apply flex items-center gap-1.5 text-xs text-label flex-wrap; }
+.crumbs a     { @apply hover:text-ink transition-colors; }
+.crumbs .sep  { @apply text-mute/60; }
+
+/* ─── animations ───────────────────────────────────────────────────────── */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fade-in { animation: fade-in 160ms ease-out; }
+
+/* ─── modal overlay scaffolding ────────────────────────────────────────── */
+.modal-backdrop { @apply fixed inset-0 z-50 bg-navy/40 backdrop-blur-[2px] flex items-start md:items-center justify-center p-4 overflow-y-auto fade-in; }
+.modal-panel    { @apply w-full max-w-5xl my-8; }
+
+/* ─── mobile polish ────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* slightly larger tap targets */
+  .btn { @apply py-2.5; min-height: 40px; }
+  .input { min-height: 40px; }
+  /* tighten card padding on phones so more content fits */
+  .card-p { @apply p-4; }
+}
+
+/* sticky modal backdrop must work on iOS Safari */
+.modal-backdrop { -webkit-overflow-scrolling: touch; }
+
+/* horizontal scroll hint for tables on narrow screens */
+.data-table { min-width: 540px; }
+
+
+/* ─── i18n: Arabic font + RTL polish ───────────────────────────────────── */
+html[lang="ar"], html[lang="ar"] body {
+  font-family: 'IBM Plex Sans Arabic', 'Inter', system-ui, sans-serif;
+}
+
+/* Numeric tabulars stay LTR even inside RTL layout */
+html[dir="rtl"] .tabular-nums { direction: ltr; unicode-bidi: isolate; }
+
+/* Recharts SVG: keep LTR axis labels readable inside RTL pages */
+html[dir="rtl"] .recharts-wrapper { direction: ltr; }

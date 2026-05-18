@@ -1,0 +1,486 @@
+export type UserRole = 'admin' | 'sales' | 'finance' | 'viewer';
+
+export type QuoteStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'approved'
+  | 'sent_to_client'
+  | 'client_approved'
+  | 'client_rejected'
+  | 'closed_won'
+  | 'closed_lost';
+
+export interface Profile {
+  id: string;
+  email: string;
+  full_name?: string;
+  role: UserRole;
+  is_active: boolean;
+}
+
+export interface Player {
+  id: number;
+  nickname: string;
+  full_name?: string;
+  role?: string;
+  game?: string;
+  team?: string;
+  nationality?: string;
+  tier_code?: string;
+  avatar_url?: string;
+  portrait_url?: string | null;
+  date_of_birth?: string;  // ISO yyyy-mm-dd
+  ingame_role?: string;    // SMG, Flex, Tank, etc.
+  rate_ig_reel: number;
+  pricing_rationale?: string | null;
+  rate_ig_post: number;
+  rate_ig_story: number;
+  rate_ig_repost: number;
+  rate_ig_share: number;
+  rate_tiktok_video: number;
+  rate_tiktok_repost: number;
+  rate_tiktok_share: number;
+  rate_yt_short: number;
+  rate_yt_short_repost: number;
+  rate_yt_full: number;     // long-form sponsored video (Migration 066)
+  rate_yt_preroll: number;  // 1-2min sponsored pre-roll ad-read (Migration 066)
+  rate_x_post: number;
+  rate_x_repost: number;
+  rate_x_share: number;
+  rate_fb_post: number;
+  rate_twitch_stream: number;
+  rate_twitch_integ: number;
+  rate_kick_stream: number;
+  rate_kick_integ: number;
+  rate_usage_monthly: number;
+  rate_promo_monthly: number;
+  rate_irl: number;
+  // ── Migration 040 — Watch Party + Snapchat suite ─────────────────────
+  rate_watchparty?: number;
+  rate_snapchat?: number;
+  rate_snap_repost?: number;
+  rate_snap_coverage?: number;
+  rate_snap_takeover?: number;
+  rate_snap_discover?: number;
+  rate_event_snap?: number;
+  // ── Migration 042 — Game Ad deliverables ─────────────────────────────
+  rate_game_playthrough_full?: number;
+  rate_game_preview_demo?: number;
+  rate_game_tutorial?: number;
+  rate_game_speedrun_challenge?: number;
+  rate_game_reaction_video?: number;
+  rate_game_clip_series_short?: number;
+  rate_game_branded_skin_use?: number;
+  rate_game_sponsored_match?: number;
+  rate_game_launch_event_irl?: number;
+  rate_game_beta_first_access?: number;
+  rate_game_review_long_form?: number;
+  rate_game_dev_co_stream?: number;
+  // ── Migration 043 — More Live & Stream ───────────────────────────────
+  rate_twitch_raid?: number;
+  rate_watch_along?: number;
+  rate_irl_stream?: number;
+  rate_charity_stream?: number;
+  rate_podcast_guest_live?: number;
+  rate_debate_panel?: number;
+  rate_hostraid_train?: number;
+  rate_subathon_block?: number;
+  rate_24h_stream?: number;
+  rate_first_play_premiere?: number;
+  // Talent-attribute defaults (Migration 043)
+  default_lifestyle_context?: string | null;
+  default_audience_country_mix?: string | null;
+  default_audience_age_demo?: string | null;
+  // World-class talent-attributes (Migration 042)
+  audience_country_mix?: Record<string, number> | null;
+  audience_age_distribution?: Record<string, number> | null;
+  brand_safety_score?: number | null;
+  reach_multiplier?: number;
+  commission: number;
+  markup: number;
+  floor_share: number;
+  authority_factor: number;
+  default_seasonality: number;
+  default_language: number;
+  default_audience?: number;
+  default_engagement?: number;
+  measurement_confidence: 'pending' | 'estimated' | 'rounded' | 'exact';
+  notes?: string;
+  x_handle?: string;
+  instagram?: string;
+  twitch?: string;
+  youtube?: string;
+  tiktok?: string;
+  kick?: string;
+  facebook?: string;
+  snapchat?: string;
+  link_in_bio?: string;
+  followers_ig?: number;
+  followers_twitch?: number;
+  followers_yt?: number;
+  followers_tiktok?: number;
+  followers_x?: number;
+  followers_fb?: number;
+  followers_snap?: number;
+  followers_kick?: number;
+  // Agency representation
+  agency_status?: 'direct' | 'agency' | 'unknown';
+  agency_name?: string | null;
+  agency_contact?: string | null;
+  // Talent intake (Migration 056) — declared agency fee % + per-deliverable floors
+  agency_fee_pct?: number | null;
+  min_rates?: Record<string, number> | null;
+  min_rates_notes?: string | null;
+  intake_status?: 'not_started' | 'sent' | 'submitted' | 'revised' | 'approved';
+  intake_submitted_at?: string | null;
+  // ── Data state (Migration 022) ────────────────────────────────────────
+  has_social_data?: boolean;
+  has_tournament_data?: boolean;
+  has_audience_demo?: boolean;
+  data_completeness?: 'full' | 'socials_only' | 'tournament_only' | 'minimal';
+  rate_card_historical?: Record<string, number | string> | null;
+  // ── Liquipedia / tournament fields (Migration 022) ─────────────────────
+  liquipedia_url?: string | null;
+  liquipedia_synced_at?: string | null;
+  prize_money_24mo_usd?: number;
+  peak_tournament_tier?: 'S' | 'A' | 'B' | 'C' | 'unrated' | null;
+  current_ranking?: string | null;
+  last_major_finish_date?: string | null;
+  last_major_placement?: string | null;
+  achievement_decay_factor?: number;
+  // ── Authority Tier (Migration 071) — replaces decay scalar ─────────────
+  authority_tier?: 'AT-0' | 'AT-1' | 'AT-2' | 'AT-3' | 'AT-4' | 'AT-5' | null;
+  authority_tier_override?: 'AT-0' | 'AT-1' | 'AT-2' | 'AT-3' | 'AT-4' | 'AT-5' | null;
+  // ── Archetype + Profile (Migration 074) — categorization spine ────────
+  archetype?: string | null;
+  archetype_override?: string | null;
+  stream_intensity?: number | null;
+  content_intensity?: number | null;
+  solo_video?: boolean | null;
+  cinematic_ready?: boolean | null;
+  irl_availability?: string | null;
+  peak_platforms?: string[] | null;
+  bilingual?: boolean | null;
+  // ── Source / audience verification (already in DB, formalising types) ──
+  rate_source?: string | null;
+  audience_data_verified?: boolean | null;
+  // ── Campaign readiness (Migration 059) ─────────────────────────────────
+  /** Computed: false only for hard blockers (no rate_source / unverified /
+   *  no tier / no anchor / no market). 'No socials' alone does NOT block. */
+  is_bookable?: boolean;
+  /** Computed 0-100. Drives pricing CONFIDENCE (floor vs median vs premium
+   *  pitch), never gates the quote button. 10 weighted signals in Mig 059. */
+  profile_strength_pct?: number;
+}
+
+export interface Creator {
+  id: number;
+  nickname: string;
+  score?: number;
+  tier_code?: string;
+  rate_x_post_quote: number;
+  rate_x_repost: number;
+  rate_ig_post: number;
+  rate_ig_story: number;
+  rate_ig_reel: number;
+  commission?: number;            // Falcons take fraction 0..1; player cut = 1 - commission
+  rate_yt_full: number;
+  rate_yt_preroll: number;
+  rate_yt_short: number;
+  rate_yt_short_repost: number;
+  rate_snapchat: number;
+  rate_tiktok_ours: number;
+  rate_tiktok_client: number;
+  rate_event_snap: number;
+  rate_twitch_kick_live: number;
+  rate_kick_irl: number;
+  rate_telegram: number;
+  rate_usage_monthly: number;
+  rate_promo_monthly: number;
+  default_audience?: number;
+  default_engagement?: number;
+  default_authority?: number;
+  default_language?: number;
+  default_seasonality?: number;
+  avatar_url?: string | null;
+  full_name?: string | null;
+  nationality?: string | null;
+  handle_ig?: string | null;
+  handle_x?: string | null;
+  handle_yt?: string | null;
+  handle_tiktok?: string | null;
+  handle_twitch?: string | null;
+  followers_ig?: number | null;
+  followers_x?: number | null;
+  followers_yt?: number | null;
+  followers_tiktok?: number | null;
+  followers_twitch?: number | null;
+  is_active?: boolean | null;
+  brand_loyalty_default_pct?: number;
+  exclusivity_premium_pct?: number;
+  cross_vertical_multiplier?: number;
+  engagement_quality_modifier?: number;
+  production_style_default?: 'raw' | 'standard' | 'scripted' | 'full_studio' | string;
+  past_campaigns?: Array<{ brand: string; year?: number; deliverable?: string; reach?: number; engagement_rate?: number; conversion_signal?: string; link?: string; notes?: string }>;
+  delivered_kpis?: Array<{ kpi: string; value: string; unit?: string; source?: string; captured_at?: string }>;
+  notes?: string;
+  link?: string;
+  // ── Data state (Migration 022) ────────────────────────────────────────
+  has_social_data?: boolean;
+  has_audience_demo?: boolean;
+  data_completeness?: 'full' | 'socials_only' | 'minimal';
+  audience_market?: string | null;
+  rate_source?: string | null;
+  rate_card_historical?: Record<string, number | string> | null;
+  // ── Campaign readiness (Migration 059) ─────────────────────────────────
+  is_bookable?: boolean;
+  profile_strength_pct?: number;
+  // ── Archetype + Profile (Migration 076) — categorization parity ──
+  archetype?: string | null;
+  archetype_override?: string | null;
+  stream_intensity?: number | null;
+  content_intensity?: number | null;
+  solo_video?: boolean | null;
+  cinematic_ready?: boolean | null;
+  irl_availability?: string | null;
+  peak_platforms?: string[] | null;
+  bilingual?: boolean | null;
+}
+
+export interface Tier {
+  id: number;
+  code: string;
+  label: string;
+  follower_threshold?: string;
+  engagement_range?: string;
+  audience_quality?: string;
+  authority_signal?: string;
+  base_fee_min?: number;
+  base_fee_max?: number;
+  floor_share: number;
+  promotion_trigger?: string;
+  demotion_trigger?: string;
+  sort_order: number;
+}
+
+export interface Addon {
+  id: number;
+  label: string;
+  uplift_pct: number;
+  description?: string;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface Quote {
+  id: string;
+  quote_number: string;
+  client_name: string;
+  client_email?: string;
+  campaign?: string;
+  owner_id?: string;
+  owner_email?: string;
+  currency: string;
+  vat_rate: number;
+  eng_factor: number;
+  audience_factor: number;
+  seasonality_factor: number;
+  content_type_factor: number;
+  language_factor: number;
+  authority_factor: number;
+  objective_weight: number;
+  measurement_confidence: 'pending' | 'estimated' | 'rounded' | 'exact';
+  subtotal: number;
+  addons_uplift_pct: number;
+  pre_vat: number;
+  vat_amount: number;
+  total: number;
+  status: QuoteStatus;
+  notes?: string;
+  internal_notes?: string;
+  client_token: string;
+  client_responded_at?: string;
+  client_response?: string;
+  created_at: string;
+  updated_at: string;
+  sent_at?: string;
+}
+
+export interface QuoteLine {
+  id: string;
+  quote_id: string;
+  sort_order: number;
+  talent_type: 'player' | 'creator';
+  player_id?: number;
+  creator_id?: number;
+  talent_name: string;
+  platform: string;
+  base_rate: number;
+  qty: number;
+  final_unit: number;
+  final_amount: number;
+  is_companion?: boolean;
+}
+
+export type PlatformGroup = 'Social Media' | 'Live & Stream' | 'On-Ground & Events' | 'Continuity & Rights' | 'Other' | 'Campaign Archetypes' | 'Game Ad' | 'Snapchat';
+
+/**
+ * Player deliverables. `manual: true` means there's no fixed per-player rate
+ * (e.g. Podcast Guesting, Fan Meet) — sales enters the rate when adding the
+ * line. Mirrors the v7 Apps Script DELIVERABLES table.
+ */
+export const PLAYER_PLATFORMS = [
+  // Social Media — fixed rates per player
+  { key: 'rate_ig_reel',       label: 'IG Reel',            group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_ig_post',     label: 'IG Static',          group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_ig_story',      label: 'IG Story',           group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_ig_repost',     label: 'IG Repost',          group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_ig_share',      label: 'IG Share to Story',  group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_tiktok_video',  label: 'TikTok Video',       group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_tiktok_repost', label: 'TikTok Repost',      group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_tiktok_share',  label: 'TikTok Stitch/Duet', group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_short',      label: 'YT Short',           group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_short_repost', label: 'YT Short Repost',    group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_full',       label: 'YT Long-form Video', group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_preroll',    label: 'YT 1–2min Pre-roll', group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_x_post',        label: 'X Post',             group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_x_repost',      label: 'X Retweet',          group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_x_share',       label: 'X Quote Tweet',      group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_fb_post',       label: 'FB Post / Video',    group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  // Live & Stream
+  { key: 'rate_twitch_stream', label: 'Twitch Stream 2h',   group: 'Live & Stream' as PlatformGroup,       manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_twitch_integ', label: 'Twitch Integration',  group: 'Live & Stream' as PlatformGroup,       manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_kick_stream',  label: 'Kick Stream 2h',      group: 'Live & Stream' as PlatformGroup,       manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_kick_integ',   label: 'Kick Integration',    group: 'Live & Stream' as PlatformGroup,       manual: false, suggestedRange: null as null | [number, number] },
+  // On-Ground & Events
+  { key: 'rate_irl',           label: 'IRL Appearance',     group: 'On-Ground & Events' as PlatformGroup,  manual: false, suggestedRange: null as null | [number, number] },
+  // Continuity & Rights — qty = number of months. Per-talent rate. Sales sets months as the quantity.
+  { key: 'rate_usage_monthly', label: '1-Month Usage Rights', group: 'Continuity & Rights' as PlatformGroup,  manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_promo_monthly', label: '1-Month Promotion (channel rotation)', group: 'Continuity & Rights' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  // ── Migration 040 — Watch Party + Snapchat suite ───────────────────
+  { key: 'rate_watchparty',     label: 'Watch Party (Hosted)',         group: 'Live & Stream' as PlatformGroup,       manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_snapchat',       label: 'Snapchat Post',                group: 'Snapchat' as PlatformGroup,             manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_snap_repost',    label: 'Snap Repost (brand asset)',    group: 'Snapchat' as PlatformGroup,             manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_snap_coverage',  label: 'Snap Coverage (1-day series)', group: 'Snapchat' as PlatformGroup,             manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_snap_takeover',  label: 'Snap Account Takeover (full day)', group: 'Snapchat' as PlatformGroup,             manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_snap_discover',  label: 'Snap Discover (premium story)', group: 'Snapchat' as PlatformGroup,             manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_event_snap',     label: 'Event Snap (on-site)',         group: 'On-Ground & Events' as PlatformGroup,  manual: false, suggestedRange: null as null | [number, number] },
+  // ── Migration 042 — Game-Ad deliverables (Xsolla-class) ────────────
+  { key: 'rate_game_playthrough_full',   label: 'Game: Full Playthrough (4-8h)',     group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_preview_demo',       label: 'Game: Pre-release / Beta Demo',     group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_tutorial',           label: 'Game: How-to-Play Tutorial',         group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_speedrun_challenge', label: 'Game: Speedrun / Branded Challenge', group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_reaction_video',     label: 'Game: Reaction Video (short)',      group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_clip_series_short',  label: 'Game: Clip Series (per clip)',       group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_branded_skin_use',   label: 'Game: Branded Skin / Character Use', group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_sponsored_match',    label: 'Game: Sponsored Match (competitive)', group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_launch_event_irl',   label: 'Game: Launch Event (IRL)',           group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_beta_first_access',  label: 'Game: First-Access Beta (24h)',     group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_review_long_form',   label: 'Game: Long-Form Review',             group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_game_dev_co_stream',      label: 'Game: Dev Co-Stream',                group: 'Game Ad' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  // ── Migration 043 — More Live & Stream ───────────────────────────
+  { key: 'rate_twitch_raid',         label: 'Twitch Raid / Shoutout',         group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_watch_along',         label: 'Watch-Along Stream',             group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_irl_stream',          label: 'IRL Handheld Stream',            group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_charity_stream',      label: 'Charity Stream (ESG)',           group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_podcast_guest_live',  label: 'Podcast Guest (Live)',           group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_debate_panel',        label: 'Debate Panel / Discussion',      group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_hostraid_train',      label: 'Host / Raid Train (multi-talent)', group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_subathon_block',      label: 'Subathon Block (2-4h)',          group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_24h_stream',          label: '24-Hour Stream Marathon',        group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_first_play_premiere', label: 'First-Play Premiere',            group: 'Live & Stream' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  // Manual entries — suggestedRange is the SAR range to anchor sales when typing.
+  // Sourced from v7 methodology hourly-cost tables + the Falcons Rate Cards.
+  { key: 'manual_podcast',     label: 'Podcast Guesting',    group: 'On-Ground & Events' as PlatformGroup, manual: true, suggestedRange: [2000, 8000]   as [number, number] },
+  { key: 'manual_pr_csr',      label: 'PR Appearance (CSR)', group: 'On-Ground & Events' as PlatformGroup, manual: true, suggestedRange: [3000, 12000]  as [number, number] },
+  { key: 'manual_fan_meet',    label: 'Fan Meet & Greet',    group: 'On-Ground & Events' as PlatformGroup, manual: true, suggestedRange: [4000, 15000]  as [number, number] },
+  { key: 'manual_photo_shoot', label: 'Photo Shoot (Brand)', group: 'Other' as PlatformGroup,              manual: true, suggestedRange: [3000, 12000]  as [number, number] },
+  { key: 'manual_snapchat',    label: 'Snapchat Coverage',   group: 'Other' as PlatformGroup,              manual: true, suggestedRange: [1500, 25000]  as [number, number] },
+  { key: 'manual_repost',      label: 'Content Repost',      group: 'Other' as PlatformGroup,              manual: true, suggestedRange: [800, 4000]    as [number, number] },
+] as const;
+
+export const CREATOR_PLATFORMS = [
+  // Per-platform fixed rates (from creator's rate card)
+  { key: 'rate_x_post_quote',      label: 'X Post / Quote',      group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_x_repost',          label: 'X Repost',            group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_ig_post',           label: 'IG Post',             group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_ig_story',          label: 'IG Story',            group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_ig_reel',          label: 'IG Reels',            group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_full',           label: 'YT Full Video',       group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_preroll',        label: 'YT 1–2min Pre-roll',  group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_short',         label: 'YT Shorts',           group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_yt_short_repost',  label: 'YT Shorts Repost',    group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_snapchat',          label: 'Snapchat',            group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_tiktok_ours',       label: 'TikTok – Falcons Account (Ours)', group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_tiktok_client',     label: 'TikTok – Client Account (Theirs)', group: 'Social Media' as PlatformGroup,        manual: false, suggestedRange: null as null | [number, number] },
+  // Live & On-Ground
+  { key: 'rate_twitch_kick_live',  label: 'Twitch / Kick Live',  group: 'Live & Stream' as PlatformGroup,       manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_kick_irl',          label: 'Kick IRL',            group: 'Live & Stream' as PlatformGroup,       manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_event_snap',        label: 'Event + Snap',        group: 'On-Ground & Events' as PlatformGroup,  manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_telegram',          label: 'Telegram Broadcast',  group: 'Other' as PlatformGroup,               manual: false, suggestedRange: null as null | [number, number] },
+  // Continuity & Rights — qty = number of months. Per-creator rate. Sales sets months as the quantity.
+  { key: 'rate_usage_monthly',     label: '1-Month Usage Rights',                group: 'Continuity & Rights' as PlatformGroup,  manual: false, suggestedRange: null as null | [number, number] },
+  { key: 'rate_promo_monthly',     label: '1-Month Promotion (channel rotation)', group: 'Continuity & Rights' as PlatformGroup, manual: false, suggestedRange: null as null | [number, number] },
+  // Campaign archetypes — manual entries for creator-led packages.
+  // SAR ranges based on Saudi market norms; refine when Shikenso data lands.
+  { key: 'archetype_lifestyle',    label: 'Lifestyle Campaign',  group: 'Campaign Archetypes' as PlatformGroup, manual: true,  suggestedRange: [15000, 50000]  as [number, number] },
+  { key: 'archetype_dayinlife',    label: 'Day-in-the-Life',     group: 'Campaign Archetypes' as PlatformGroup, manual: true,  suggestedRange: [8000, 30000]   as [number, number] },
+  { key: 'archetype_ambassador',   label: 'Brand Ambassador (monthly)', group: 'Campaign Archetypes' as PlatformGroup, manual: true, suggestedRange: [20000, 75000]  as [number, number] },
+  { key: 'archetype_unboxing',     label: 'Product Unboxing',    group: 'Campaign Archetypes' as PlatformGroup, manual: true,  suggestedRange: [3000, 10000]   as [number, number] },
+  { key: 'archetype_event',        label: 'Event Activation',    group: 'Campaign Archetypes' as PlatformGroup, manual: true,  suggestedRange: [5000, 25000]   as [number, number] },
+  { key: 'archetype_always_on',    label: 'Always-On Partnership (quarter)', group: 'Campaign Archetypes' as PlatformGroup, manual: true, suggestedRange: [50000, 200000] as [number, number] },
+] as const;
+
+// ── Sales Log (realized revenue ledger) ─────────────────────────────────────
+
+export type SalesStatus = 'in_progress' | 'waiting_for_payment' | 'payment_collected' | 'cancelled';
+
+export interface SalesEntry {
+  id: string;
+  deal_date: string;             // ISO date
+  category: string;              // 'Esports Influencer' default
+  talent_name: string;           // Arabic-supported free text
+  creator_id: number | null;
+  player_id: number | null;
+  brand_name: string | null;
+  description: string | null;
+  platform: string | null;
+  amount_usd: number;
+  amount_sar: number;
+  total_with_vat_sar: number;
+  vat_rate: number;
+  status: SalesStatus;
+  invoice_issued: boolean;
+  payment_collected: boolean;
+  claim_filed: boolean;
+  cc_pay: boolean;
+  quote_id: string | null;
+  attachments: string[] | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Esports Teams (owned media channels) ─────────────────────────────────────
+export interface EsportsTeam {
+  id: number;
+  game: string;
+  team_name: string;
+  logo_url: string | null;
+  brand_color: string | null;
+  handle_ig: string | null;
+  handle_x: string | null;
+  handle_tiktok: string | null;
+  handle_yt: string | null;
+  handle_twitch: string | null;
+  handle_kick: string | null;
+  discord_url: string | null;
+  followers_ig: number;
+  followers_x: number;
+  followers_tiktok: number;
+  subscribers_yt: number;
+  followers_twitch: number;
+  is_active: boolean;
+  sort_order: number;
+  notes: string | null;
+}

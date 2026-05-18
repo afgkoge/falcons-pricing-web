@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.env.local
+.env
+.DS_Store
+*.log
+.vercel/
+
+# build artifacts
+next-env.d.ts
+tsconfig.tsbuildinfo
+package-lock.json
+tsconfig.check.tsbuildinfo
+
+# secrets / session-local
+.gh-pat

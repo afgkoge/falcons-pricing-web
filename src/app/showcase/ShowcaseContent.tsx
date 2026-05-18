@@ -1,0 +1,1617 @@
+'use client';
+import { useMemo, useState, useEffect } from 'react';
+import {
+  Trophy, Users, Sparkles, Search, X as XIcon, ShieldCheck,
+  Crown, Flame, MapPin, Zap, Eye, EyeOff, ArrowUpRight,
+  Radio, Clock, TrendingUp,
+} from 'lucide-react';
+import { Avatar } from '@/components/Avatar';
+import { AuthorityChip } from '@/components/AuthorityChip';
+import { ArchetypeChip } from '@/components/ArchetypeChip';
+import { getAnchorPremium } from '@/lib/authority-tier';
+
+type Player = {
+  id: number; nickname: string; full_name: string | null;
+  role: string | null; game: string | null; team: string | null;
+  nationality: string | null; tier_code: string | null;
+  avatar_url: string | null;
+  rate_ig_reel: number; rate_irl: number;
+  pricing_rationale?: string | null;
+  authority_factor: number | null; measurement_confidence: string | null;
+  authority_tier?: string | null; authority_tier_override?: string | null;
+  archetype?: string | null; archetype_override?: string | null;
+  followers_ig: number | null; followers_twitch: number | null; followers_yt: number | null;
+  followers_tiktok: number | null; followers_x: number | null; followers_fb: number | null; followers_snap: number | null;
+  instagram: string | null; twitch: string | null; youtube: string | null; tiktok: string | null; x_handle: string | null;
+  kick: string | null; facebook: string | null; liquipedia_url: string | null;
+  bio: string | null; achievements: string[] | null;
+  date_of_birth: string | null; ingame_role: string | null;
+};
+type Creator = {
+  id: number; nickname: string;
+  full_name: string | null; nationality: string | null;
+  avatar_url: string | null;
+  tier_code: string | null; score: number | null;
+  rate_ig_reel: number; rate_yt_full: number; rate_yt_short: number;
+  pricing_rationale?: string | null;
+  rate_tiktok_ours: number; rate_twitch_kick_live: number;
+  handle_ig: string | null; handle_x: string | null;
+  handle_yt: string | null; handle_tiktok: string | null; handle_twitch: string | null; handle_kick?: string | null; handle_snap?: string | null;
+  followers_ig: number | null; followers_x: number | null;
+  followers_yt: number | null; followers_tiktok: number | null; followers_twitch: number | null; followers_kick?: number | null; followers_snap?: number | null;
+  notes: string | null; link: string | null;
+  past_campaigns?: Array<{ brand: string; year?: number; deliverable?: string; conversion_signal?: string; link?: string; notes?: string }> | null;
+  delivered_kpis?: Array<{ kpi: string; value: string; unit?: string; source?: string; captured_at?: string }> | null;
+};
+
+// Hardcoded championship signals — until we have a proper achievements table,
+// flag the names we know from public records so cards earn a "Champion" badge.
+const M5_CHAMPIONS = new Set(['FlapTzy', 'Hadji', 'Owgwen', 'KyleTzy', 'Super Marco', 'Ferdz']);
+
+// Hardcoded creator achievements — surfaced as gold chips on the showcase card.
+// Source: SAFEIS / Saudi Esports Federation public records + Team Falcons brand sheet.
+const CREATOR_AWARDS: Record<string, string[]> = {
+  'BanderitaX': ['SAFEIS Best Creator 2019', '20M+ YT subs'],
+  'oPiiLz':     ['SEF Best Creator 2024', '2B+ YT views'],
+  'Msdossary7': ['FIFA eWorld Cup Champion', 'Falcons Chairman'],
+  'Drb7h':      ['Top-5 KSA Streamer'],
+  'Aziz':       ['Arabic YT veteran since 2011'],
+  'Bo3omar22':  ['Lifestyle anchor'],
+  'Abu abeer':  ['Biggest FIFA streamer in KSA'],
+  'TheWitty21': ['Beloved Falcons presenter'],
+  'Oden':       ['Lifestyle + fitness niche'],
+};
+const MAJOR_WINNERS = new Set([
+  'NiKo', 'm0NESY',                           // CS2 Major MVPs
+  'Vejrgang',                                  // EAFC eWorld Cup champ
+  'Msdossary',                                 // FIFA eWorld Cup champ (KSA pride)
+  'Clayster',                                  // Multi-time CDL champion
+  'TGLTN',                                     // PUBG GLL Grand Slam
+]);
+
+// Twitch live-streaming stats (90d window, sourced from Falcons_Talent_Stream_Stats Apr 2026).
+// 51 talents tracked. Used to enrich Showcase cards with peak-viewer / hours-watched signals
+// — the single biggest credibility lever for live-stream sponsorship pitches.
+const STREAM_STATS: Record<string, { peak90: number; avg90: number; streamed: number; watched: number; active: number }> = {
+  'm0NESY': { peak90: 24821, avg90: 16577, streamed: 6.6, watched: 108857, active: 2 },
+  'Peterbot': { peak90: 21211, avg90: 7374, streamed: 80.5, watched: 593357, active: 28 },
+  'kyousuke': { peak90: 17189, avg90: 9651, streamed: 3.2, watched: 30723, active: 2 },
+  'ImperialHal': { peak90: 16789, avg90: 5325, streamed: 616.0, watched: 3281422, active: 81 },
+  'NiKo': { peak90: 8076, avg90: 6229, streamed: 5.4, watched: 33636, active: 2 },
+  'TGLTN': { peak90: 4047, avg90: 1893, streamed: 203.0, watched: 384785, active: 60 },
+  'Abo Najd': { peak90: 2869, avg90: 616, streamed: 388.0, watched: 239173, active: 78 },
+  'Wxltzy': { peak90: 2806, avg90: 282, streamed: 378.0, watched: 106583, active: 63 },
+  'Kiileerrz': { peak90: 2725, avg90: 2244, streamed: 1.3, watched: 2805, active: 1 },
+  'Spammiej': { peak90: 2615, avg90: 801, streamed: 370.0, watched: 296904, active: 72 },
+  'Hikaru Nakamura': { peak90: 2584, avg90: 1277, streamed: 9.1, watched: 11624, active: 3 },
+  'Soka': { peak90: 2489, avg90: 889, streamed: 620.0, watched: 551822, active: 78 },
+  'Malr1ne': { peak90: 2196, avg90: 1835, streamed: 4.2, watched: 7676, active: 1 },
+  'Pollo': { peak90: 2122, avg90: 1026, streamed: 43.0, watched: 44062, active: 16 },
+  'Draugr': { peak90: 1954, avg90: 98, streamed: 84.6, watched: 8259, active: 21 },
+  'Pred': { peak90: 1913, avg90: 851, streamed: 72.4, watched: 61588, active: 22 },
+  'dralii': { peak90: 1712, avg90: 707, streamed: 19.2, watched: 13572, active: 7 },
+  'CarlJr': { peak90: 1327, avg90: 832, streamed: 96.0, watched: 79911, active: 20 },
+  'Swooty': { peak90: 1281, avg90: 221, streamed: 203.0, watched: 44966, active: 44 },
+  'Dongy': { peak90: 1242, avg90: 257, streamed: 571.0, watched: 146683, active: 81 },
+  'Kickstart': { peak90: 1234, avg90: 267, streamed: 122.0, watched: 32718, active: 37 },
+  'Exnid': { peak90: 1143, avg90: 584, streamed: 140.0, watched: 81936, active: 39 },
+  'Privacy': { peak90: 1033, avg90: 343, streamed: 81.0, watched: 27823, active: 19 },
+  'ChiYo': { peak90: 868, avg90: 486, streamed: 1.7, watched: 834, active: 1 },
+  'madv': { peak90: 825, avg90: 458, streamed: 16.1, watched: 7355, active: 7 },
+  'Gild': { peak90: 787, avg90: 148, streamed: 384.0, watched: 56945, active: 78 },
+  'Cellium': { peak90: 681, avg90: 570, streamed: 2.1, watched: 1226, active: 1 },
+  'KiSMET': { peak90: 648, avg90: 239, streamed: 137.0, watched: 32755, active: 27 },
+  'Bijw': { peak90: 596, avg90: 187, streamed: 84.8, watched: 15834, active: 28 },
+  'Paulehx': { peak90: 589, avg90: 42, streamed: 221.0, watched: 9324, active: 58 },
+  'Abo Ghazi': { peak90: 427, avg90: 104, streamed: 67.2, watched: 6986, active: 23 },
+  'Gntl': { peak90: 406, avg90: 188, streamed: 10.7, watched: 2015, active: 3 },
+  'Newbz': { peak90: 369, avg90: 93, streamed: 546.0, watched: 50714, active: 85 },
+  'Shrimzy': { peak90: 318, avg90: 98, streamed: 53.4, watched: 5231, active: 19 },
+  'Arcitys': { peak90: 263, avg90: 47, streamed: 103.0, watched: 4796, active: 45 },
+  'Clayster': { peak90: 257, avg90: 102, streamed: 15.3, watched: 1566, active: 4 },
+  'jume': { peak90: 241, avg90: 133, streamed: 7.2, watched: 958, active: 2 },
+  'Jose Serrano': { peak90: 221, avg90: 102, streamed: 107.0, watched: 10949, active: 40 },
+  'Kusanagi': { peak90: 183, avg90: 120, streamed: 8.0, watched: 964, active: 3 },
+  'hmoodx': { peak90: 177, avg90: 81, streamed: 138.0, watched: 11240, active: 38 },
+  'Spy': { peak90: 174, avg90: 72, streamed: 5.0, watched: 359, active: 3 },
+  'xizx7': { peak90: 126, avg90: 46, streamed: 77.3, watched: 3562, active: 15 },
+  'Frenchi': { peak90: 112, avg90: 41, streamed: 25.4, watched: 1033, active: 9 },
+  'FMG': { peak90: 109, avg90: 60, streamed: 8.9, watched: 532, active: 4 },
+  'Tapewaare': { peak90: 72, avg90: 18, streamed: 41.6, watched: 729, active: 12 },
+  'Xyzzy': { peak90: 62, avg90: 16, streamed: 129.0, watched: 2064, active: 27 },
+  'Kindevu': { peak90: 56, avg90: 38, streamed: 4.0, watched: 150, active: 1 },
+  'Aqeel9': { peak90: 54, avg90: 25, streamed: 54.5, watched: 1360, active: 18 },
+  'Gunner': { peak90: 35, avg90: 14, streamed: 26.7, watched: 383, active: 10 },
+  'VENO': { peak90: 14, avg90: 8, streamed: 12.8, watched: 103, active: 7 },
+};
+
+function fmtCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toString();
+}
+
+function maxReach(p: Player): number {
+  return Math.max(
+    p.followers_ig || 0, p.followers_twitch || 0, p.followers_yt || 0,
+    p.followers_tiktok || 0, p.followers_x || 0, p.followers_fb || 0, p.followers_snap || 0,
+  );
+}
+function totalReach(p: Player): number {
+  return (p.followers_ig || 0) + (p.followers_twitch || 0) + (p.followers_yt || 0) +
+         (p.followers_tiktok || 0) + (p.followers_x || 0) + (p.followers_fb || 0) + (p.followers_snap || 0);
+}
+function fmtReach(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toString();
+}
+
+const TIER_STYLES: Record<string, { ring: string; chip: string; gradient: string; label: string }> = {
+  'Tier S': {
+    ring: 'ring-2 ring-gold/60 shadow-[0_0_24px_-8px_rgba(212,165,20,0.5)]',
+    chip: 'bg-gold/15 text-gold border-gold/40',
+    gradient: 'from-gold/20 via-gold/5 to-transparent',
+    label: 'Global Anchor',
+  },
+  'Tier 1': {
+    ring: 'ring-1 ring-greenDark/40',
+    chip: 'bg-greenSoft text-greenDark border-greenDark/40',
+    gradient: 'from-green/15 via-green/5 to-transparent',
+    label: 'Premium Pro',
+  },
+  'Tier 2': {
+    ring: 'ring-1 ring-navy/30',
+    chip: 'bg-navy/10 text-navy border-navy/30',
+    gradient: 'from-navy/10 via-navy/5 to-transparent',
+    label: 'Active Pro',
+  },
+  'Tier 3': {
+    ring: 'ring-1 ring-line',
+    chip: 'bg-bg text-label border-line',
+    gradient: 'from-bg via-bg to-transparent',
+    label: 'Rising',
+  },
+  'Tier 4': {
+    ring: 'ring-1 ring-line',
+    chip: 'bg-bg text-label border-line',
+    gradient: 'from-bg via-bg to-transparent',
+    label: 'Entry / Staff',
+  },
+};
+
+
+// ─── Inline filter-pills group used in showcase filter bars ────────────────
+function FilterPills({
+  label, value, onChange, options,
+}: {
+  label: string; value: string;
+  onChange: (v: string) => void;
+  options: Array<{ v: string; label: string }>;
+}) {
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className="text-[10px] uppercase tracking-wider text-mute font-bold mr-1">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="text-xs border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-greenDark/30"
+      >
+        {options.map(o => <option key={o.v || '__all__'} value={o.v}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+// NAT_LOOKUP — canonical mapping from raw nationality string -> {country, region}.
+// Handles both adjective form ("Filipino") and country form ("Philippines"), plus DB
+// typos and dual-nationality entries ("French/Iranian" -> uses the first token).
+// Buckets: KSA, GCC, MENA, SEA, South Asia, East Asia, Europe, North America, LATAM, Oceania, Other.
+const NAT_LOOKUP: Record<string, { country: string; region: string }> = {
+  // KSA
+  'saudi': { country: 'Saudi Arabia', region: 'KSA' },
+  'saudi arabia': { country: 'Saudi Arabia', region: 'KSA' },
+  'saudi arabian': { country: 'Saudi Arabia', region: 'KSA' },
+  // GCC
+  'emirati': { country: 'UAE', region: 'GCC' },
+  'uae': { country: 'UAE', region: 'GCC' },
+  'united arab emirates': { country: 'UAE', region: 'GCC' },
+  'bahraini': { country: 'Bahrain', region: 'GCC' },
+  'bahrain': { country: 'Bahrain', region: 'GCC' },
+  'kuwaiti': { country: 'Kuwait', region: 'GCC' },
+  'kuwait': { country: 'Kuwait', region: 'GCC' },
+  'qatari': { country: 'Qatar', region: 'GCC' },
+  'qatar': { country: 'Qatar', region: 'GCC' },
+  'omani': { country: 'Oman', region: 'GCC' },
+  'oman': { country: 'Oman', region: 'GCC' },
+  // MENA broader
+  'egypt': { country: 'Egypt', region: 'MENA' },
+  'egyptian': { country: 'Egypt', region: 'MENA' },
+  'jordan': { country: 'Jordan', region: 'MENA' },
+  'jordanian': { country: 'Jordan', region: 'MENA' },
+  'lebanon': { country: 'Lebanon', region: 'MENA' },
+  'lebanese': { country: 'Lebanon', region: 'MENA' },
+  'tunisia': { country: 'Tunisia', region: 'MENA' },
+  'tunisian': { country: 'Tunisia', region: 'MENA' },
+  'morocco': { country: 'Morocco', region: 'MENA' },
+  'moroccan': { country: 'Morocco', region: 'MENA' },
+  'morrocan': { country: 'Morocco', region: 'MENA' }, // DB typo
+  'algeria': { country: 'Algeria', region: 'MENA' },
+  'algerian': { country: 'Algeria', region: 'MENA' },
+  'iraq': { country: 'Iraq', region: 'MENA' },
+  'iraqi': { country: 'Iraq', region: 'MENA' },
+  'syria': { country: 'Syria', region: 'MENA' },
+  'syrian': { country: 'Syria', region: 'MENA' },
+  'palestine': { country: 'Palestine', region: 'MENA' },
+  'palestinian': { country: 'Palestine', region: 'MENA' },
+  'libya': { country: 'Libya', region: 'MENA' },
+  'libyan': { country: 'Libya', region: 'MENA' },
+  'yemen': { country: 'Yemen', region: 'MENA' },
+  'yemeni': { country: 'Yemen', region: 'MENA' },
+  'sudan': { country: 'Sudan', region: 'MENA' },
+  'sudanese': { country: 'Sudan', region: 'MENA' },
+  'turkey': { country: 'Turkey', region: 'MENA' },
+  'turkish': { country: 'Turkey', region: 'MENA' },
+  'iran': { country: 'Iran', region: 'MENA' },
+  'iranian': { country: 'Iran', region: 'MENA' },
+  // SEA
+  'philippines': { country: 'Philippines', region: 'SEA' },
+  'filipino': { country: 'Philippines', region: 'SEA' },
+  'philippine': { country: 'Philippines', region: 'SEA' },
+  'indonesia': { country: 'Indonesia', region: 'SEA' },
+  'indonesian': { country: 'Indonesia', region: 'SEA' },
+  'vietnam': { country: 'Vietnam', region: 'SEA' },
+  'vietnamese': { country: 'Vietnam', region: 'SEA' },
+  'thailand': { country: 'Thailand', region: 'SEA' },
+  'thai': { country: 'Thailand', region: 'SEA' },
+  'malaysia': { country: 'Malaysia', region: 'SEA' },
+  'malaysian': { country: 'Malaysia', region: 'SEA' },
+  'singapore': { country: 'Singapore', region: 'SEA' },
+  'singaporean': { country: 'Singapore', region: 'SEA' },
+  'myanmar': { country: 'Myanmar', region: 'SEA' },
+  'burmese': { country: 'Myanmar', region: 'SEA' },
+  'cambodia': { country: 'Cambodia', region: 'SEA' },
+  'cambodian': { country: 'Cambodia', region: 'SEA' },
+  'laos': { country: 'Laos', region: 'SEA' },
+  'laotian': { country: 'Laos', region: 'SEA' },
+  // South Asia
+  'pakistan': { country: 'Pakistan', region: 'South Asia' },
+  'pakistani': { country: 'Pakistan', region: 'South Asia' },
+  'india': { country: 'India', region: 'South Asia' },
+  'indian': { country: 'India', region: 'South Asia' },
+  'bangladesh': { country: 'Bangladesh', region: 'South Asia' },
+  'bangladeshi': { country: 'Bangladesh', region: 'South Asia' },
+  'sri lanka': { country: 'Sri Lanka', region: 'South Asia' },
+  'sri lankan': { country: 'Sri Lanka', region: 'South Asia' },
+  'nepal': { country: 'Nepal', region: 'South Asia' },
+  'nepali': { country: 'Nepal', region: 'South Asia' },
+  'afghanistan': { country: 'Afghanistan', region: 'South Asia' },
+  'afghan': { country: 'Afghanistan', region: 'South Asia' },
+  // East Asia
+  'south korean': { country: 'South Korea', region: 'East Asia' },
+  'south korea': { country: 'South Korea', region: 'East Asia' },
+  'korean': { country: 'South Korea', region: 'East Asia' },
+  'korea': { country: 'South Korea', region: 'East Asia' },
+  'china': { country: 'China', region: 'East Asia' },
+  'chinese': { country: 'China', region: 'East Asia' },
+  'taiwan': { country: 'Taiwan', region: 'East Asia' },
+  'taiwanese': { country: 'Taiwan', region: 'East Asia' },
+  'japan': { country: 'Japan', region: 'East Asia' },
+  'japanese': { country: 'Japan', region: 'East Asia' },
+  'hong kong': { country: 'Hong Kong', region: 'East Asia' },
+  'mongolia': { country: 'Mongolia', region: 'East Asia' },
+  'mongolian': { country: 'Mongolia', region: 'East Asia' },
+  // Europe (covers continental + UK + Balkans + Russia)
+  'british': { country: 'United Kingdom', region: 'Europe' },
+  'uk': { country: 'United Kingdom', region: 'Europe' },
+  'united kingdom': { country: 'United Kingdom', region: 'Europe' },
+  'english': { country: 'United Kingdom', region: 'Europe' },
+  'irish': { country: 'Ireland', region: 'Europe' },
+  'ireland': { country: 'Ireland', region: 'Europe' },
+  'french': { country: 'France', region: 'Europe' },
+  'france': { country: 'France', region: 'Europe' },
+  'german': { country: 'Germany', region: 'Europe' },
+  'germany': { country: 'Germany', region: 'Europe' },
+  'danish': { country: 'Denmark', region: 'Europe' },
+  'denmark': { country: 'Denmark', region: 'Europe' },
+  'swedish': { country: 'Sweden', region: 'Europe' },
+  'sweden': { country: 'Sweden', region: 'Europe' },
+  'norwegian': { country: 'Norway', region: 'Europe' },
+  'norway': { country: 'Norway', region: 'Europe' },
+  'finnish': { country: 'Finland', region: 'Europe' },
+  'finland': { country: 'Finland', region: 'Europe' },
+  'dutch': { country: 'Netherlands', region: 'Europe' },
+  'netherlands': { country: 'Netherlands', region: 'Europe' },
+  'nethelands': { country: 'Netherlands', region: 'Europe' }, // DB typo
+  'spanish': { country: 'Spain', region: 'Europe' },
+  'spain': { country: 'Spain', region: 'Europe' },
+  'italian': { country: 'Italy', region: 'Europe' },
+  'italy': { country: 'Italy', region: 'Europe' },
+  'polish': { country: 'Poland', region: 'Europe' },
+  'poland': { country: 'Poland', region: 'Europe' },
+  'portuguese': { country: 'Portugal', region: 'Europe' },
+  'portugal': { country: 'Portugal', region: 'Europe' },
+  'austrian': { country: 'Austria', region: 'Europe' },
+  'austria': { country: 'Austria', region: 'Europe' },
+  'swiss': { country: 'Switzerland', region: 'Europe' },
+  'switzerland': { country: 'Switzerland', region: 'Europe' },
+  'belgian': { country: 'Belgium', region: 'Europe' },
+  'belgium': { country: 'Belgium', region: 'Europe' },
+  'greek': { country: 'Greece', region: 'Europe' },
+  'greece': { country: 'Greece', region: 'Europe' },
+  'czech': { country: 'Czechia', region: 'Europe' },
+  'czechia': { country: 'Czechia', region: 'Europe' },
+  'slovakia': { country: 'Slovakia', region: 'Europe' },
+  'slovakian': { country: 'Slovakia', region: 'Europe' },
+  'slovak': { country: 'Slovakia', region: 'Europe' },
+  'hungarian': { country: 'Hungary', region: 'Europe' },
+  'hungary': { country: 'Hungary', region: 'Europe' },
+  'romanian': { country: 'Romania', region: 'Europe' },
+  'romania': { country: 'Romania', region: 'Europe' },
+  'bulgarian': { country: 'Bulgaria', region: 'Europe' },
+  'bulgaria': { country: 'Bulgaria', region: 'Europe' },
+  'serbian': { country: 'Serbia', region: 'Europe' },
+  'serbia': { country: 'Serbia', region: 'Europe' },
+  'bosnian': { country: 'Bosnia', region: 'Europe' },
+  'bosnia': { country: 'Bosnia', region: 'Europe' },
+  'croatian': { country: 'Croatia', region: 'Europe' },
+  'croatia': { country: 'Croatia', region: 'Europe' },
+  'north macedonian': { country: 'North Macedonia', region: 'Europe' },
+  'north macedonia': { country: 'North Macedonia', region: 'Europe' },
+  'macedonian': { country: 'North Macedonia', region: 'Europe' },
+  'ukrainian': { country: 'Ukraine', region: 'Europe' },
+  'ukraine': { country: 'Ukraine', region: 'Europe' },
+  'russian': { country: 'Russia', region: 'Europe' },
+  'russia': { country: 'Russia', region: 'Europe' },
+  // North America
+  'american': { country: 'United States', region: 'North America' },
+  'usa': { country: 'United States', region: 'North America' },
+  'us': { country: 'United States', region: 'North America' },
+  'united states': { country: 'United States', region: 'North America' },
+  'canadian': { country: 'Canada', region: 'North America' },
+  'canada': { country: 'Canada', region: 'North America' },
+  // LATAM
+  'mexican': { country: 'Mexico', region: 'LATAM' },
+  'mexico': { country: 'Mexico', region: 'LATAM' },
+  'brazilian': { country: 'Brazil', region: 'LATAM' },
+  'brasilian': { country: 'Brazil', region: 'LATAM' }, // DB typo
+  'brazil': { country: 'Brazil', region: 'LATAM' },
+  'argentinian': { country: 'Argentina', region: 'LATAM' },
+  'argentine': { country: 'Argentina', region: 'LATAM' },
+  'argentina': { country: 'Argentina', region: 'LATAM' },
+  'chilean': { country: 'Chile', region: 'LATAM' },
+  'chile': { country: 'Chile', region: 'LATAM' },
+  'colombian': { country: 'Colombia', region: 'LATAM' },
+  'colombia': { country: 'Colombia', region: 'LATAM' },
+  'venezuelan': { country: 'Venezuela', region: 'LATAM' },
+  'venezuela': { country: 'Venezuela', region: 'LATAM' },
+  'peruvian': { country: 'Peru', region: 'LATAM' },
+  'peru': { country: 'Peru', region: 'LATAM' },
+  // Oceania
+  'australian': { country: 'Australia', region: 'Oceania' },
+  'australia': { country: 'Australia', region: 'Oceania' },
+  'new zealander': { country: 'New Zealand', region: 'Oceania' },
+  'new zealand': { country: 'New Zealand', region: 'Oceania' },
+  'kiwi': { country: 'New Zealand', region: 'Oceania' },
+  'tongan': { country: 'Tonga', region: 'Oceania' },
+  'tonga': { country: 'Tonga', region: 'Oceania' },
+  'fijian': { country: 'Fiji', region: 'Oceania' },
+  'fiji': { country: 'Fiji', region: 'Oceania' },
+};
+
+// Resolve a raw nationality string (possibly dual like "American / Chinese") to country+region.
+// Uses the FIRST recognized token so we don't lose the player when the DB stored a slashed value.
+const natLookupRaw = (nat: string | null | undefined): { country: string; region: string } => {
+  const raw = (nat ?? '').toLowerCase().trim();
+  if (!raw) return { country: 'Unknown', region: 'Other' };
+  // Try whole string first
+  if (NAT_LOOKUP[raw]) return NAT_LOOKUP[raw];
+  // Split on / , & + and "and"  -> try each token
+  const tokens = raw.split(/[\/,&+]| and /).map(s => s.trim()).filter(Boolean);
+  for (const t of tokens) {
+    if (NAT_LOOKUP[t]) return NAT_LOOKUP[t];
+  }
+  return { country: nat ?? 'Unknown', region: 'Other' };
+};
+
+export function ShowcaseContent({ players, creators }: { players: Player[]; creators: Creator[] }) {
+  const [tab, setTab] = useState<'players' | 'creators'>('players');
+  const [q, setQ] = useState('');
+  const [archetypeFilter, setArchetypeFilter] = useState<string>('');
+  const [tier, setTier] = useState('');
+  const [game, setGame] = useState('');
+  const [region, setRegion] = useState('');
+  const [country, setCountry] = useState('');
+  const [championOnly, setChampionOnly] = useState(false);
+  const [streamerOnly, setStreamerOnly] = useState(false);
+  const [showRates, setShowRates] = useState(false);
+  const [sort, setSort] = useState<'reach' | 'tier'>('reach');
+  const [openPlayerId, setOpenPlayerId] = useState<number | null>(null);
+  const [openCreatorId, setOpenCreatorId] = useState<number | null>(null);
+  // Creator-tab filters
+  const [crTier, setCrTier]   = useState<string>(''); // '', 'Tier S', 'Tier 1'
+  const [crReach, setCrReach] = useState<string>(''); // '', 'anchor', 'premium', 'established', 'mid', 'emerging'
+  const [crMarket, setCrMarket] = useState<string>(''); // '', 'KSA', 'MENA', 'Global'
+  const [crQ, setCrQ] = useState('');
+  // Deep-link from /roster, /admin, etc.: open detail modal directly
+  // when ?focus=<playerId> is in the URL. Cleared after consumption so
+  // a manual close doesn't re-open on re-render.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const focus = url.searchParams.get('focus');
+    const fid = focus ? Number(focus) : NaN;
+    if (Number.isFinite(fid) && players.some(p => p.id === fid)) {
+      setOpenPlayerId(fid);
+      setTab('players');
+      setShowRates(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
+  const games = useMemo(() => Array.from(new Set(players.map(p => p.game).filter(Boolean))).sort() as string[], [players]);
+
+  // Distinct canonical countries present in the active roster, ordered by talent count desc.
+  const countries = useMemo(() => {
+    const counts = new Map<string, number>();
+    players.forEach(p => {
+      const c = natLookupRaw(p.nationality).country;
+      if (!c || c === 'Unknown') return;
+      counts.set(c, (counts.get(c) ?? 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([c]) => c);
+  }, [players]);
+
+  // Region + country resolution from raw nationality string. See module-level NAT_LOOKUP above.
+  const regionOf  = (nat: string | null | undefined): string => natLookupRaw(nat).region;
+  const countryOf = (nat: string | null | undefined): string => natLookupRaw(nat).country;
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    let list = players.filter(p => {
+      if (tier && p.tier_code !== tier) return false;
+      if (archetypeFilter && ((p as any).archetype_override ?? (p as any).archetype) !== archetypeFilter) return false;
+      if (game && p.game !== game) return false;
+      if (region && regionOf(p.nationality) !== region) return false;
+      if (country && countryOf(p.nationality) !== country) return false;
+      if (championOnly) {
+        const isChamp = M5_CHAMPIONS.has(p.nickname) || MAJOR_WINNERS.has(p.nickname) || p.tier_code === 'Tier S';
+        if (!isChamp) return false;
+      }
+      if (streamerOnly) {
+        const s = STREAM_STATS[p.nickname];
+        if (!s || s.active < 20) return false;  // active = streamed >=20 of last 90 days
+      }
+      if (s) {
+        const fields = [p.nickname, p.full_name, p.team, p.game, p.nationality, p.role];
+        if (!fields.filter(Boolean).some(v => v!.toLowerCase().includes(s))) return false;
+      }
+      return true;
+    });
+
+    if (sort === 'reach') {
+      list = list.sort((a, b) => maxReach(b) - maxReach(a));
+    } else {
+      const order: Record<string, number> = { 'Tier S': 0, 'Tier 1': 1, 'Tier 2': 2, 'Tier 3': 3, 'Tier 4': 4 };
+      list = list.sort((a, b) => (order[a.tier_code || ''] ?? 9) - (order[b.tier_code || ''] ?? 9) || maxReach(b) - maxReach(a));
+    }
+    return list;
+  }, [players, q, tier, game, region, country, championOnly, streamerOnly, sort]);
+
+  // Org-level stats for the hero
+  const stats = useMemo(() => {
+    const totalCombined = players.reduce((s, p) => s + totalReach(p), 0);
+    const ts = players.filter(p => p.tier_code === 'Tier S').length;
+    const champs = players.filter(p => M5_CHAMPIONS.has(p.nickname) || MAJOR_WINNERS.has(p.nickname)).length;
+    return { totalCombined, talentCount: players.length, tierS: ts, champions: champs, gamesCount: games.length };
+  }, [players, games]);
+
+  const distinctTiers = useMemo(
+    () => Array.from(new Set(players.map(p => p.tier_code).filter(Boolean)))
+            .sort((a, b) => {
+              const order: Record<string, number> = { 'Tier S': 0, 'Tier 1': 1, 'Tier 2': 2, 'Tier 3': 3, 'Tier 4': 4 };
+              return (order[a as string] ?? 9) - (order[b as string] ?? 9);
+            }) as string[],
+    [players],
+  );
+
+  return (
+    <div className="space-y-8 -mx-4 sm:-mx-6 lg:-mx-8 -mt-2 pb-12">
+      {/* ─── Hero ──────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy via-navy to-greenDark text-white px-6 sm:px-10 py-12 sm:py-16">
+        <div aria-hidden className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-30 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #2ED06E 0%, transparent 70%)' }} />
+        <div aria-hidden className="absolute -bottom-32 -left-20 w-80 h-80 rounded-full opacity-25 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #D4A514 0%, transparent 70%)' }} />
+
+        <div className="relative max-w-4xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur text-xs uppercase tracking-wider font-bold">
+            <Trophy size={14} /> Team Falcons Roster
+          </div>
+          <h1 className="mt-5 text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
+            One roster.<br/>
+            Every game that matters.<br/>
+            <span className="text-gold">Championships across the board.</span>
+          </h1>
+          <p className="mt-5 text-base sm:text-lg text-white/80 max-w-2xl">
+            From Saudi homegrown stars to global anchors — Falcons fields top-tier talent across {stats.gamesCount}+ disciplines.
+            Filter by game, region, tier, or championship credentials. Every rate is data-driven and engine-locked.
+          </p>
+        </div>
+
+        {/* Big stats strip */}
+        <div className="relative mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl">
+          {[
+            { label: 'Active talent',         value: stats.talentCount.toString(),                                        sub: 'Players + influencers + staff' },
+            { label: 'Combined reach',        value: fmtReach(stats.totalCombined),                                       sub: 'Across IG · TikTok · YT · Twitch · X · FB' },
+            { label: 'Global anchors',        value: stats.tierS.toString(),                                              sub: 'Tier S · 1M+ reach' },
+            { label: 'Championship-decorated',value: stats.champions.toString(),                                          sub: 'M5 · EWC · CS Major · CDL · World #2' },
+            // Twitch live coverage gives non-endemic brands a measurable exposure number
+          ].map(s => (
+            <div key={s.label} className="rounded-xl bg-white/10 backdrop-blur border border-white/20 px-4 py-4">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-white/70">{s.label}</div>
+              <div className="text-3xl sm:text-4xl font-extrabold mt-1 tabular-nums">{s.value}</div>
+              <div className="text-[11px] text-white/70 mt-1">{s.sub}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── 🏆 World Champions strip (Migration 071/074) ────────────── */}
+      {(() => {
+        const champs = players.filter(p => (p.authority_tier_override ?? p.authority_tier) === 'AT-1');
+        if (champs.length === 0) return null;
+        return (
+          <section className="px-4 sm:px-6 lg:px-8">
+            <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-5">
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-lg font-bold text-amber-900 flex items-center gap-2">
+                  🏆 World Champions <span className="text-xs font-normal text-amber-700">· Tier-S 1st-place within 12mo</span>
+                </h2>
+                <span className="text-xs text-amber-700 font-semibold tabular-nums">{champs.length} talents · ×1.40 anchor premium</span>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {champs.map(p => (
+                  <div key={p.id} className="flex-shrink-0 w-44 rounded-lg bg-white border border-amber-200 p-3 hover:border-amber-400 transition">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Avatar src={p.avatar_url || undefined} name={p.nickname} size="md" />
+                      <div className="min-w-0">
+                        <div className="font-semibold text-ink truncate">{p.nickname}</div>
+                        <div className="text-[10px] text-mute truncate">{p.tier_code} · {p.game}</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <AuthorityChip player={p as any} size="sm" />
+                      <ArchetypeChip player={p as any} size="sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* ─── Tab strip ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 border-b border-line overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        {(['players','creators'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={[
+              'relative px-5 py-3 text-sm font-semibold transition flex items-center gap-2',
+              tab === t ? 'text-ink' : 'text-mute hover:text-ink',
+            ].join(' ')}>
+            {t === 'players' ? <Users size={16} /> : <Sparkles size={16} />}
+            <span className="capitalize">{t}</span>
+            <span className={['px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums',
+              tab === t ? 'bg-green text-white' : 'bg-bg text-mute'].join(' ')}>
+              {t === 'players' ? players.length : creators.length}
+            </span>
+            {tab === t && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-gradient-to-r from-green via-greenDark to-green rounded-full" />}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'players' && (
+        <>
+          {/* ─── Filter bar ─────────────────────────────────────────────── */}
+          <div className="card card-p sticky top-0 z-10 -mx-1 sm:mx-0 space-y-2">
+            {/* Row 1: search input — full width, never gets squeezed by sibling filters */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-mute pointer-events-none" />
+                <input
+                  value={q}
+                  onChange={e => setQ(e.target.value)}
+                  placeholder="Search talent, game, team…"
+                  className="input pl-9 text-sm"
+                />
+                {q && (
+                  <button onClick={() => setQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-mute hover:text-ink">
+                    <XIcon size={14} />
+                  </button>
+                )}
+              </div>
+              <span className="text-xs text-label tabular-nums whitespace-nowrap pr-1">
+                {filtered.length} of {players.length}
+              </span>
+            </div>
+            {/* Row 2: filter dropdowns + toggles — wraps freely without crushing the search */}
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={tier} onChange={e => setTier(e.target.value)} className="input text-sm max-w-[140px]">
+                <option value="">All tiers</option>
+                {distinctTiers.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={game} onChange={e => setGame(e.target.value)} className="input text-sm max-w-[200px]">
+                <option value="">All games</option>
+                {games.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <select value={region} onChange={e => { setRegion(e.target.value); setCountry(''); }} className="input text-sm max-w-[160px]" title="Filter by region bucket">
+                <option value="">All regions</option>
+                <option value="KSA">KSA</option>
+                <option value="GCC">GCC</option>
+                <option value="MENA">MENA broader</option>
+                <option value="SEA">SEA</option>
+                <option value="South Asia">South Asia</option>
+                <option value="East Asia">East Asia</option>
+                <option value="Europe">Europe</option>
+                <option value="North America">North America</option>
+                <option value="LATAM">LATAM</option>
+                <option value="Oceania">Oceania</option>
+                <option value="Other">Other</option>
+              </select>
+              <select value={country} onChange={e => setCountry(e.target.value)} className="input text-sm max-w-[180px]" title="Filter by exact country">
+                <option value="">All countries</option>
+                {countries.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select value={archetypeFilter} onChange={e => setArchetypeFilter(e.target.value)} className="input text-sm max-w-[200px]" title="Filter by archetype (Mig 074)">
+                <option value="">All archetypes</option>
+                <option value="world_class_pro">World-Class Pro</option>
+                <option value="established_pro">Established Pro</option>
+                <option value="regional_pro">Regional Pro</option>
+                <option value="esports_personality">Esports Personality</option>
+                <option value="hybrid_lifestyle">Hybrid Lifestyle</option>
+                <option value="grassroots_competitor">Grassroots</option>
+                <option value="tournament_athlete">Tournament Athlete</option>
+              </select>
+              <button
+                onClick={() => setChampionOnly(v => !v)}
+                aria-pressed={championOnly}
+                className={[
+                  'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-bold transition',
+                  championOnly
+                    ? 'bg-gold text-white border-gold'
+                    : 'bg-white text-label border-line hover:border-gold hover:text-gold',
+                ].join(' ')}
+                title="Show only championship-decorated talent"
+              >
+                <Crown size={12} /> Champions only
+              </button>
+              <button
+                onClick={() => setStreamerOnly(v => !v)}
+                aria-pressed={streamerOnly}
+                className={[
+                  'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-bold transition',
+                  streamerOnly
+                    ? 'bg-purple-600 text-white border-purple-600'
+                    : 'bg-white text-label border-line hover:border-purple-500 hover:text-purple-600',
+                ].join(' ')}
+                title="Show only active live-streamers (20+ active days last 90)"
+              >
+                <Radio size={12} /> Active streamers
+              </button>
+              <select value={sort} onChange={e => setSort(e.target.value as any)} className="input text-sm max-w-[140px]">
+                <option value="reach">Sort: Reach</option>
+                <option value="tier">Sort: Tier</option>
+              </select>
+
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setShowRates(v => !v)}
+                  className={[
+                    'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition',
+                    showRates ? 'bg-greenSoft text-greenDark border-green/40' : 'bg-white text-mute border-line hover:text-ink',
+                  ].join(' ')}
+                  title={showRates ? 'Hide rates (pitch mode)' : 'Show rates (internal)'}
+                >
+                  {showRates ? <Eye size={12} /> : <EyeOff size={12} />}
+                  {showRates ? 'Rates ON' : 'Pitch mode'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Talent grid ────────────────────────────────────────────── */}
+          {filtered.length === 0 ? (
+            <div className="card card-p text-center py-16">
+              <div className="text-mute mb-2"><Users size={40} className="mx-auto opacity-50" /></div>
+              <div className="text-lg font-semibold text-ink">No talent matches</div>
+              <div className="text-sm text-mute mt-1">Try clearing filters or broadening the search.</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filtered.map(p => {
+                const peak = maxReach(p);
+                const total = totalReach(p);
+                const tierStyle = TIER_STYLES[p.tier_code || ''] ?? TIER_STYLES['Tier 3'];
+                const isChamp = M5_CHAMPIONS.has(p.nickname) || MAJOR_WINNERS.has(p.nickname);
+                const isLocked = p.measurement_confidence === 'exact';
+                const isSaudi = (p.nationality || '').toLowerCase().startsWith('saudi');
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setOpenPlayerId(p.id)}
+                    className={[
+                      'group relative rounded-2xl bg-white border border-line overflow-hidden transition-all hover:shadow-lift hover:-translate-y-0.5 text-left w-full cursor-pointer',
+                      tierStyle.ring,
+                    ].join(' ')}
+                  >
+                    {/* Tier-tinted gradient accent at the top */}
+                    <div className={`h-20 bg-gradient-to-br ${tierStyle.gradient} relative`}>
+                      <div className="absolute inset-x-0 bottom-0 h-px bg-line" />
+                      {/* Tier label at top-right */}
+                      {p.tier_code && (
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${tierStyle.chip}`}>
+                            {p.tier_code}
+                          </span>
+                          {isLocked && (
+                            <span title="Verified data" className="px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-green/15 text-greenDark border border-green/30 inline-flex items-center gap-1">
+                              <ShieldCheck size={9} /> Verified
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="px-5 pb-5 -mt-10 relative">
+                      <Avatar src={p.avatar_url} name={p.nickname} size="lg" />
+
+                      <div className="mt-3 flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="font-bold text-ink text-lg truncate">{p.nickname}</h3>
+                            {isChamp && (
+                              <span title="Championship-decorated" className="inline-flex items-center gap-1 px-1.5 py-0 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gold/15 text-gold border border-gold/40">
+                                <Crown size={9} /> Champion
+                              </span>
+                            )}
+                            {isSaudi && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0 rounded-full text-[9px] font-bold uppercase tracking-wider bg-green/10 text-greenDark border border-green/30">
+                                KSA
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-mute mt-0.5 truncate">{p.full_name}</div>
+                          <div className="text-xs text-label mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            {p.role && <span className="font-medium">{p.role}</span>}
+                            {p.game && <><span className="text-mute">·</span><span className="truncate">{p.game}</span></>}
+                          </div>
+                          {p.team && (
+                            <div className="text-[11px] text-mute mt-0.5 truncate">{p.team}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stats */}
+                      <div className="mt-4 pt-4 border-t border-line space-y-2.5">
+                        {peak > 0 ? (
+                          <div className="flex items-end justify-between gap-2">
+                            <div>
+                              <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Peak reach</div>
+                              <div className="text-2xl font-extrabold text-ink tabular-nums leading-none">
+                                {fmtReach(peak)}
+                              </div>
+                            </div>
+                            {total > peak * 1.2 && (
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Combined</div>
+                                <div className="text-sm font-bold text-greenDark tabular-nums">
+                                  {fmtReach(total)}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Tier baseline</div>
+                            <div className="text-base font-bold text-label">{p.tier_code || "—"}</div>
+                          </div>
+                        )}
+
+                        {STREAM_STATS[p.nickname] && (
+                          <div className="pt-3 border-t border-dashed border-line">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0 rounded-full text-[9px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
+                                <Radio size={9} /> Live · 90d
+                              </span>
+                              <span className="text-[10px] text-mute">Twitch · last 90 days</span>
+                            </div>
+                            {(() => { const s = STREAM_STATS[p.nickname]; return (
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <div className="rounded bg-bg/60 px-2 py-1.5">
+                                  <div className="text-[9px] uppercase tracking-wider text-mute font-bold">Peak</div>
+                                  <div className="text-sm font-bold text-ink tabular-nums">{fmtCount(s.peak90)}</div>
+                                  <div className="text-[9px] text-mute">live viewers</div>
+                                </div>
+                                <div className="rounded bg-bg/60 px-2 py-1.5">
+                                  <div className="text-[9px] uppercase tracking-wider text-mute font-bold">Watched</div>
+                                  <div className="text-sm font-bold text-ink tabular-nums">{fmtCount(s.watched)}h</div>
+                                  <div className="text-[9px] text-mute">brand exposure</div>
+                                </div>
+                                <div className="rounded bg-bg/60 px-2 py-1.5">
+                                  <div className="text-[9px] uppercase tracking-wider text-mute font-bold">Active</div>
+                                  <div className="text-sm font-bold text-ink tabular-nums">{s.active}/90</div>
+                                  <div className="text-[9px] text-mute">days streamed</div>
+                                </div>
+                              </div>
+                            ); })()}
+                          </div>
+                        )}
+
+                        {showRates && p.rate_ig_reel > 0 && (() => {
+                          // Migration 071 — show effective baseFee (stored × anchor_premium) so brands
+                          // see the same rate the engine quotes. Stored value moved to a tooltip.
+                          const premium = getAnchorPremium(p as any);
+                          const effective = Math.round(p.rate_ig_reel * premium);
+                          const liftActive = premium !== 1.0;
+                          return (
+                            <div
+                              className="flex items-center justify-between pt-2 border-t border-dashed border-line"
+                              title={
+                                (liftActive
+                                  ? `Effective baseFee = stored SAR ${p.rate_ig_reel.toLocaleString('en-US')} × ${premium.toFixed(2)} anchor premium (Mig 071)\n`
+                                  : '') + (p.pricing_rationale || '')
+                              }
+                            >
+                              <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Starts from</div>
+                              <div className="text-sm font-bold text-greenDark tabular-nums">
+                                SAR {effective.toLocaleString('en-US')}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {showRates && p.pricing_rationale && (
+                          <div className="text-[10px] text-mute italic leading-snug -mt-1 line-clamp-2"
+                            title={p.pricing_rationale}>
+                            {p.pricing_rationale}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'creators' && (() => {
+        // Compute reach + filter the grid based on the filter bar state
+        const reachOf = (c: Creator) =>
+          (c.followers_yt || 0) + (c.followers_tiktok || 0) + (c.followers_ig || 0) +
+          (c.followers_x || 0) + ((c as any).followers_kick || 0) + ((c as any).followers_snap || 0);
+        const reachTierOf = (n: number): 'anchor' | 'premium' | 'established' | 'mid' | 'emerging' =>
+          n >= 10_000_000 ? 'anchor' :
+          n >= 3_000_000  ? 'premium' :
+          n >= 1_000_000  ? 'established' :
+          n >= 250_000    ? 'mid' : 'emerging';
+        const sCr = crQ.trim().toLowerCase();
+        const filtered = creators.filter(c => {
+          if (crTier && c.tier_code !== crTier) return false;
+          const r = reachOf(c);
+          if (crReach && reachTierOf(r) !== crReach) return false;
+          if (crMarket) {
+            const market = (c as any).audience_market as string | undefined;
+            if (market !== crMarket) return false;
+          }
+          if (sCr) {
+            const hay = [c.nickname, c.full_name, c.notes].filter(Boolean).join(' ').toLowerCase();
+            if (!hay.includes(sCr)) return false;
+          }
+          return true;
+        });
+        return (
+        <div className="card card-p">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-gold/15 text-gold flex items-center justify-center flex-shrink-0">
+              <Sparkles size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-bold text-ink">Lifestyle &amp; gaming creators</h2>
+              <p className="text-sm text-label mt-0.5">
+                Premium-only roster — all Tier 1 / Tier S. Click any creator for the full client-pitch profile + booking.
+              </p>
+            </div>
+          </div>
+
+          {/* Filter bar */}
+          <div className="flex items-center gap-2 flex-wrap mb-4 pb-4 border-b border-line">
+            <input
+              type="search"
+              value={crQ}
+              onChange={(e) => setCrQ(e.target.value)}
+              placeholder="Search creator name or vibe…"
+              className="text-sm border border-line rounded-lg px-3 py-1.5 bg-white flex-1 min-w-[200px] max-w-xs focus:outline-none focus:ring-2 focus:ring-greenDark/30"
+            />
+            <FilterPills label="Reach" value={crReach} onChange={setCrReach} options={[
+              { v: '',           label: 'All reach' },
+              { v: 'anchor',     label: 'Anchor 10M+' },
+              { v: 'premium',    label: 'Premium 3M+' },
+              { v: 'established',label: 'Established 1M+' },
+              { v: 'mid',        label: 'Mid 250K+' },
+              { v: 'emerging',   label: 'Emerging' },
+            ]} />
+            <FilterPills label="Tier" value={crTier} onChange={setCrTier} options={[
+              { v: '',       label: 'All tiers' },
+              { v: 'Tier S', label: 'Tier S' },
+              { v: 'Tier 1', label: 'Tier 1' },
+            ]} />
+            <FilterPills label="Market" value={crMarket} onChange={setCrMarket} options={[
+              { v: '',       label: 'All markets' },
+              { v: 'KSA',    label: 'KSA' },
+              { v: 'MENA',   label: 'MENA' },
+              { v: 'Global', label: 'Global' },
+            ]} />
+            <span className="text-[11px] text-mute ml-auto">{filtered.length} of {creators.length}</span>
+            {(crQ || crTier || crReach || crMarket) && (
+              <button
+                type="button"
+                onClick={() => { setCrQ(''); setCrTier(''); setCrReach(''); setCrMarket(''); }}
+                className="text-[11px] text-greenDark hover:underline"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="text-center py-12 text-sm text-mute">
+              No creators match those filters.
+            </div>
+          ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map(c => {
+              const tierStyle = TIER_STYLES[c.tier_code || ''] ?? TIER_STYLES['Tier 1'];
+              const reachItems = [
+                { label: 'YT',    value: c.followers_yt,     handle: c.handle_yt    },
+                { label: 'TT',    value: c.followers_tiktok, handle: c.handle_tiktok},
+                { label: 'IG',    value: c.followers_ig,     handle: c.handle_ig    },
+                { label: 'X',     value: c.followers_x,      handle: c.handle_x     },
+                { label: 'KICK',  value: c.followers_kick,   handle: c.handle_kick  },
+                { label: 'SNAP',  value: c.followers_snap,   handle: c.handle_snap  },
+              ].filter(r => r.value && r.value > 0);
+              const totalReach = reachItems.reduce((s, r) => s + (r.value || 0), 0);
+              const peak = Math.max(...reachItems.map(r => r.value || 0), 0);
+              const dataPending = totalReach === 0;
+              const isSaudi = (c.nationality || '').toLowerCase().startsWith('saudi');
+              const isAnchor = totalReach >= 10_000_000;
+              const isPremium = totalReach >= 3_000_000;
+              const awards = CREATOR_AWARDS[c.nickname] || [];
+              const impact = (() => {
+                if (dataPending) return 'Data pending — handles + follower counts being verified.';
+                if (totalReach >= 10_000_000) return 'Anchor creator. Top-tier brand association vehicle for nationwide MENA campaigns.';
+                if (totalReach >= 3_000_000) return 'Premium voice. Drives brand authority + conversion across the Saudi gaming demographic.';
+                if (totalReach >= 1_000_000) return 'Established creator. Strong fit for cultural-fit briefs + product launches.';
+                if (totalReach >= 250_000) return 'Mid-tier creator. Best for vertical/niche briefs and community-led product seeding.';
+                return 'Emerging voice. Micro-community engagement; strong CPM-to-trust ratio.';
+              })();
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setOpenCreatorId(c.id)}
+                  className={[
+                    'group relative rounded-2xl bg-white border border-line overflow-hidden transition-all hover:shadow-lift hover:-translate-y-0.5 text-left w-full focus:outline-none focus:ring-2 focus:ring-greenDark/40',
+                    tierStyle.ring,
+                  ].join(' ')}
+                >
+                  {/* Tier-tinted gradient accent at the top */}
+                  <div className={`h-16 bg-gradient-to-br ${tierStyle.gradient} relative`}>
+                    <div className="absolute inset-x-0 bottom-0 h-px bg-line" />
+                    {c.tier_code && (
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${tierStyle.chip}`}>{c.tier_code}</span>
+                      </div>
+                    )}
+                    {dataPending && (
+                      <div className="absolute top-3 left-3">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-300">data pending</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-5 pb-5 -mt-8 relative">
+                    <Avatar src={c.avatar_url} name={c.nickname} size="lg" />
+                    <h3 className="font-bold text-ink text-lg truncate mt-3 flex items-center gap-1.5">
+                      {c.nickname}
+                      {isAnchor && <Crown size={13} className="text-gold" aria-label="Anchor" />}
+                      {!isAnchor && isPremium && <Flame size={12} className="text-greenDark" aria-label="Premium" />}
+                    </h3>
+                    {c.full_name && <div className="text-xs text-mute truncate">{c.full_name}</div>}
+                    <div className="text-xs text-label mt-1.5 flex items-center gap-1.5 flex-wrap">
+                      {c.nationality && <span className="flex items-center gap-1"><MapPin size={11} /> {c.nationality}</span>}
+                      {isSaudi && <span className="inline-flex items-center px-1.5 py-0 rounded-full text-[9px] font-bold uppercase tracking-wider bg-green/10 text-greenDark border border-green/30">KSA</span>}
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-line flex items-end justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Total reach</div>
+                        <div className="text-2xl font-extrabold text-ink tabular-nums leading-none">
+                          {dataPending ? '—' : fmtCount(totalReach)}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] uppercase tracking-wider text-mute font-bold">From</div>
+                        <div className="text-sm font-bold text-greenDark tabular-nums leading-tight">
+                          {c.rate_ig_reel > 0 ? `SAR ${c.rate_ig_reel.toLocaleString('en-US')}` : 'On request'}
+                        </div>
+                        <div className="text-[10px] text-mute">per IG Reel</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-line flex items-center justify-between">
+                      <div className="text-[11px] text-greenDark font-semibold inline-flex items-center gap-1">
+                        View profile <ArrowUpRight size={12} />
+                      </div>
+                      <div className="text-[10px] text-mute">Click for full pitch</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          )}
+        </div>
+        );
+      })()}
+
+{/* ─── Player detail modal ──────────────────────────────────────── */}
+      {openPlayerId !== null && (() => {
+        const p = players.find(pp => pp.id === openPlayerId);
+        if (!p) return null;
+        const peak = maxReach(p);
+        const total = totalReach(p);
+        const tierStyle = TIER_STYLES[p.tier_code || ''] ?? TIER_STYLES['Tier 3'];
+        const isChamp = M5_CHAMPIONS.has(p.nickname) || MAJOR_WINNERS.has(p.nickname);
+        const isLocked = p.measurement_confidence === 'exact';
+        const isSaudi = (p.nationality || '').toLowerCase().startsWith('saudi');
+        const stream = STREAM_STATS[p.nickname];
+        const dob = p.date_of_birth ? new Date(p.date_of_birth) : null;
+        const age = dob ? Math.floor((Date.now() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : null;
+
+        // Synthetic bio — generated when no manual bio is set
+        const synthBio = (() => {
+          const parts: string[] = [];
+          const opener = `${p.nickname} is ${p.role === 'Player' ? 'a player' : (p.role || 'a member')}` +
+            `${p.ingame_role ? ` (${p.ingame_role})` : ''}` +
+            `${p.team ? ` for ${p.team}` : ''}` +
+            `${p.game ? `, competing in ${p.game}` : ''}.`;
+          parts.push(opener);
+          if (p.nationality) parts.push(`Based in ${p.nationality}.`);
+          if (isChamp) parts.push(M5_CHAMPIONS.has(p.nickname) ? 'M5 World Champion.' : 'Major-tournament champion.');
+          if (peak > 0) parts.push(`Peak platform reach: ${fmtReach(peak)} followers.`);
+          if (stream && stream.active >= 20) {
+            parts.push(`Active live streamer — ${stream.active}/90 days, peak ${fmtReach(stream.peak90)} concurrent viewers, ${fmtCount(stream.watched)} hours watched.`);
+          } else if (stream && stream.peak90 > 0) {
+            parts.push(`Streams during major events — peak ${fmtReach(stream.peak90)} concurrent viewers on Twitch.`);
+          }
+          return parts.join(' ');
+        })();
+
+        const socials: { label: string; url: string }[] = [];
+        const add = (label: string, val: string | null) => {
+          if (!val) return;
+          const v = val.trim();
+          if (!v || v === '-' || v === '—') return;
+          socials.push({ label, url: /^https?:\/\//i.test(v) ? v : `https://${v.replace(/^@/, '')}` });
+        };
+        add('Instagram', p.instagram);
+        add('Twitch', p.twitch);
+        add('YouTube', p.youtube);
+        add('TikTok', p.tiktok);
+        add('X / Twitter', p.x_handle);
+        add('Kick', p.kick);
+        add('Facebook', p.facebook);
+        add('Liquipedia', p.liquipedia_url);
+
+        const platforms: { label: string; n: number }[] = [
+          { label: 'Instagram', n: p.followers_ig || 0 },
+          { label: 'TikTok',    n: p.followers_tiktok || 0 },
+          { label: 'YouTube',   n: p.followers_yt || 0 },
+          { label: 'Twitch',    n: p.followers_twitch || 0 },
+          { label: 'Facebook',  n: p.followers_fb || 0 },
+          { label: 'X',         n: p.followers_x || 0 },
+          { label: 'Snapchat',  n: p.followers_snap || 0 },
+        ].filter(x => x.n > 0).sort((a, b) => b.n - a.n);
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-navy/60 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto"
+            onClick={() => setOpenPlayerId(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-lift w-full max-w-3xl my-8 overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Hero strip */}
+              <div className={`relative h-32 bg-gradient-to-br ${tierStyle.gradient}`}>
+                <button
+                  onClick={() => setOpenPlayerId(null)}
+                  className="absolute top-3 right-3 p-2 rounded-full bg-white/80 hover:bg-white text-mute hover:text-ink shadow-sm"
+                  aria-label="Close"
+                >
+                  <XIcon size={16} />
+                </button>
+                <div className="absolute -bottom-12 left-6">
+                  <Avatar src={p.avatar_url} name={p.nickname} size="lg" />
+                </div>
+              </div>
+
+              <div className="px-6 pt-16 pb-6 space-y-5">
+                {/* Header */}
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-2xl font-extrabold text-ink">{p.nickname}</h2>
+                    {p.tier_code && (
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border ${tierStyle.chip}`}>
+                        {p.tier_code}
+                      </span>
+                    )}
+                    {isChamp && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gold/15 text-gold border border-gold/40">
+                        <Crown size={10} /> Champion
+                      </span>
+                    )}
+                    {isLocked && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green/15 text-greenDark border border-green/30">
+                        <ShieldCheck size={10} /> Verified
+                      </span>
+                    )}
+                    {isSaudi && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green/10 text-greenDark border border-green/30">
+                        KSA
+                      </span>
+                    )}
+                  </div>
+                  {p.full_name && <div className="text-sm text-mute mt-1">{p.full_name}</div>}
+                  <div className="text-sm text-label mt-2 flex items-center gap-2 flex-wrap">
+                    {p.role && <span className="font-medium">{p.role}</span>}
+                    {p.ingame_role && <><span className="text-mute">·</span><span>{p.ingame_role}</span></>}
+                    {p.game && <><span className="text-mute">·</span><span>{p.game}</span></>}
+                    {p.team && <><span className="text-mute">·</span><span>{p.team}</span></>}
+                    {age && <><span className="text-mute">·</span><span>Age {age}</span></>}
+                  </div>
+                </div>
+
+                {/* Bio */}
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-label font-bold mb-1.5">Bio</div>
+                  <p className="text-sm text-ink leading-relaxed">
+                    {p.bio && p.bio.trim() ? p.bio : synthBio}
+                  </p>
+                  {!p.bio && (
+                    <p className="text-[10px] text-mute italic mt-1">Auto-generated from talent record. Add a manual bio in admin to customize.</p>
+                  )}
+                </div>
+
+                {/* Achievements */}
+                {p.achievements && p.achievements.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-label font-bold mb-1.5 flex items-center gap-1.5">
+                      <Trophy size={11} /> Achievements
+                    </div>
+                    <ul className="space-y-1">
+                      {p.achievements.map((a, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-ink">
+                          <span className="w-1 h-1 rounded-full bg-gold mt-2 shrink-0" />
+                          {a}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Platform reach grid */}
+                {platforms.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-label font-bold mb-2">Platform reach</div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {platforms.map(pl => (
+                        <div key={pl.label} className="rounded-lg border border-line bg-bg/40 px-3 py-2">
+                          <div className="text-[9px] uppercase tracking-wider text-mute font-bold">{pl.label}</div>
+                          <div className="text-base font-bold text-ink tabular-nums">{fmtReach(pl.n)}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-mute mt-2 tabular-nums">
+                      Combined reach: <strong className="text-greenDark">{fmtReach(total)}</strong>
+                      {peak > 0 && <> · Peak (single platform): <strong className="text-ink">{fmtReach(peak)}</strong></>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Stream stats — full breakdown */}
+                {stream && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-label font-bold mb-2 flex items-center gap-1.5">
+                      <Radio size={11} /> Twitch live · last 90 days
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      <div className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1.5">
+                        <div className="text-[9px] uppercase tracking-wider text-purple-700 font-bold">Peak viewers</div>
+                        <div className="text-base font-bold text-ink tabular-nums">{fmtCount(stream.peak90)}</div>
+                      </div>
+                      <div className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1.5">
+                        <div className="text-[9px] uppercase tracking-wider text-purple-700 font-bold">Avg viewers</div>
+                        <div className="text-base font-bold text-ink tabular-nums">{fmtCount(stream.avg90)}</div>
+                      </div>
+                      <div className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1.5">
+                        <div className="text-[9px] uppercase tracking-wider text-purple-700 font-bold">Hours streamed</div>
+                        <div className="text-base font-bold text-ink tabular-nums">{Math.round(stream.streamed)}</div>
+                      </div>
+                      <div className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1.5">
+                        <div className="text-[9px] uppercase tracking-wider text-purple-700 font-bold">Hours watched</div>
+                        <div className="text-base font-bold text-ink tabular-nums">{fmtCount(stream.watched)}</div>
+                      </div>
+                      <div className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1.5">
+                        <div className="text-[9px] uppercase tracking-wider text-purple-700 font-bold">Active days</div>
+                        <div className="text-base font-bold text-ink tabular-nums">{stream.active}/90</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Socials */}
+                {socials.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-label font-bold mb-2">Channels</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {socials.map(s => (
+                        <a key={s.label} href={s.url} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] bg-bg border border-line text-label hover:text-greenDark hover:border-green hover:bg-greenSoft transition">
+                          {s.label}
+                          <ArrowUpRight size={10} className="opacity-60" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── Pricing breakdown — "Why this price?" ──────────────── */}
+                {showRates && (
+                  <div className="rounded-xl border-2 border-greenDark/30 bg-white overflow-hidden">
+                    <div className="bg-greenDark text-white px-4 py-2.5 flex items-center justify-between">
+                      <div className="text-xs uppercase tracking-wider font-bold">Why this price?</div>
+                      <div className="text-[10px] opacity-90">Methodology: CPM × Reach × 3.75 SAR/USD</div>
+                    </div>
+                    <div className="p-4 space-y-2 text-xs">
+                      {[
+                        { label: 'IG Reel',         cpm: 18, n: p.followers_ig||0,     rate: p.rate_ig_reel },
+                        { label: 'IG Static',       cpm: 10, n: p.followers_ig||0,     rate: (p as any).rate_ig_post },
+                        { label: 'IG Story',        cpm:  6, n: p.followers_ig||0,     rate: (p as any).rate_ig_story },
+                        { label: 'TikTok Video',    cpm: 20, n: p.followers_tiktok||0, rate: (p as any).rate_tiktok_video },
+                        { label: 'TikTok Repost',   cpm: 10, n: p.followers_tiktok||0, rate: (p as any).rate_tiktok_repost },
+                        { label: 'YT Short',        cpm: 10, n: p.followers_yt||0,     rate: (p as any).rate_yt_short },
+                        { label: 'YT Short Repost', cpm:  5, n: p.followers_yt||0,     rate: (p as any).rate_yt_short_repost },
+                        { label: 'X Post',          cpm:  8, n: p.followers_x||0,      rate: (p as any).rate_x_post },
+                        { label: 'X Repost',        cpm:  4, n: p.followers_x||0,      rate: (p as any).rate_x_repost },
+                        { label: 'Twitch Stream',   cpm: 20, n: p.followers_twitch||0, rate: (p as any).rate_twitch_stream },
+                        { label: 'Twitch Integ.',   cpm: 10, n: p.followers_twitch||0, rate: (p as any).rate_twitch_integ },
+                      ].filter(r => (r.rate || 0) > 0).map(r => (
+                        <div key={r.label} className="grid grid-cols-12 items-baseline gap-2">
+                          <div className="col-span-3 font-semibold text-ink">{r.label}</div>
+                          <div className="col-span-5 text-mute font-mono text-[10px] tabular-nums">
+                            ${r.cpm} × {fmtCount(r.n)} ÷ 1k × 3.75
+                          </div>
+                          <div className="col-span-4 text-right font-bold text-greenDark tabular-nums">
+                            SAR {Number(r.rate || 0).toLocaleString('en-US')}
+                          </div>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-12 items-baseline gap-2 pt-2 border-t border-line">
+                        <div className="col-span-3 font-semibold text-ink">IRL / Event</div>
+                        <div className="col-span-5 text-mute italic text-[10px]">
+                          Tier-flat fee ({p.tier_code || 'unknown tier'}, doesn't scale with followers)
+                        </div>
+                        <div className="col-span-4 text-right font-bold text-greenDark tabular-nums">
+                          SAR {Number((p as any).rate_irl || 0).toLocaleString('en-US')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-greenSoft/30 border-t border-greenDark/20 px-4 py-2 text-[11px] text-greenDark leading-relaxed">
+                      Final quote price = base × engagement × audience × seasonality × content type × language × authority × confidence × (1 + rights). All multipliers default to 1.0 — flexed per-deal in the Configurator.
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── Action bar (Edit + Liquipedia link) ───────────────── */}
+                <div className="flex items-center gap-2 flex-wrap pt-2">
+                  <a
+                    href={`/admin/players/${p.id}`}
+                    className="btn btn-primary text-xs"
+                    title="Edit this talent (admin only — page-gated)"
+                  >
+                    Edit talent
+                  </a>
+                  {p.game && (
+                    <a
+                      href={`https://liquipedia.net/${(p.game.toLowerCase().includes('counter') ? 'counterstrike'
+                        : p.game.toLowerCase().includes('dota') ? 'dota2'
+                        : p.game.toLowerCase().includes('valorant') ? 'valorant'
+                        : p.game.toLowerCase().includes('apex') ? 'apexlegends'
+                        : p.game.toLowerCase().includes('fortnite') ? 'fortnite'
+                        : p.game.toLowerCase().includes('call of duty') ? 'callofduty'
+                        : p.game.toLowerCase().includes('mobile legends') ? 'mobilelegends'
+                        : p.game.toLowerCase().includes('overwatch') ? 'overwatch'
+                        : p.game.toLowerCase().includes('rainbow') ? 'rainbowsix'
+                        : p.game.toLowerCase().includes('rocket') ? 'rocketleague'
+                        : p.game.toLowerCase().includes('pubg') ? 'pubg'
+                        : p.game.toLowerCase().includes('chess') ? 'chess'
+                        : 'counterstrike')}/${encodeURIComponent(p.nickname)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-ghost text-xs"
+                    >
+                      <ArrowUpRight size={12} /> Liquipedia
+                    </a>
+                  )}
+                  <span className="text-[10px] text-mute ml-auto">
+                    Tier {p.tier_code?.replace('Tier ', '')} {p.measurement_confidence === 'exact' ? '· verified data' : '· estimated'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Creator detail modal ──────────────────────────────────────── */}
+      {openCreatorId !== null && (() => {
+        const c = creators.find(cc => cc.id === openCreatorId);
+        if (!c) return null;
+        const tierStyle = TIER_STYLES[c.tier_code || ''] ?? TIER_STYLES['Tier 1'];
+        const reachItems = [
+          { label: 'YouTube',  short: 'YT',   value: c.followers_yt,     handle: c.handle_yt,     icon: 'youtube' },
+          { label: 'Snapchat', short: 'SNAP', value: (c as any).followers_snap, handle: (c as any).handle_snap, icon: 'snapchat' },
+          { label: 'TikTok',   short: 'TT',   value: c.followers_tiktok, handle: c.handle_tiktok, icon: 'tiktok' },
+          { label: 'Instagram',short: 'IG',   value: c.followers_ig,     handle: c.handle_ig,     icon: 'instagram' },
+          { label: 'X / Twitter', short: 'X', value: c.followers_x,      handle: c.handle_x,      icon: 'x' },
+          { label: 'Kick',     short: 'KICK', value: (c as any).followers_kick, handle: (c as any).handle_kick, icon: 'kick' },
+        ].filter(r => r.value && r.value > 0);
+        const totalReach = reachItems.reduce((s, r) => s + (r.value || 0), 0);
+        const peakItem = reachItems.reduce((best: any, r: any) => (r.value > (best?.value ?? 0) ? r : best), null as any);
+        const dataPending = totalReach === 0;
+        const isAnchor = totalReach >= 10_000_000;
+        const isPremium = totalReach >= 3_000_000;
+        const isSaudi = (c.nationality || '').toLowerCase().startsWith('saudi');
+        const awards = CREATOR_AWARDS[c.nickname] || [];
+        const usp = (() => {
+          if (dataPending) return 'Data pending — handles + follower counts being verified.';
+          if (totalReach >= 10_000_000) return 'Anchor creator. Top-tier brand association vehicle for nationwide MENA campaigns.';
+          if (totalReach >= 3_000_000) return 'Premium voice. Drives brand authority + conversion across the Saudi gaming demographic.';
+          if (totalReach >= 1_000_000) return 'Established creator. Strong fit for cultural-fit briefs + product launches.';
+          if (totalReach >= 250_000) return 'Mid-tier creator. Best for vertical/niche briefs and community-led product seeding.';
+          return 'Emerging voice. Micro-community engagement; strong CPM-to-trust ratio.';
+        })();
+        const platformLink = (h: string | null, kind: string) => {
+          if (!h) return null;
+          const handle = String(h).replace(/^https?:\/\/[^/]+\//, '').replace(/^@/, '');
+          if (kind === 'youtube')   return `https://youtube.com/${handle.startsWith('@') ? '' : '@'}${handle}`;
+          if (kind === 'tiktok')    return `https://tiktok.com/@${handle}`;
+          if (kind === 'instagram') return `https://instagram.com/${handle}`;
+          if (kind === 'x')         return `https://x.com/${handle}`;
+          if (kind === 'twitch')    return `https://twitch.tv/${handle}`;
+          if (kind === 'kick')      return `https://kick.com/${handle}`;
+          if (kind === 'snapchat')  return `https://www.snapchat.com/add/${handle}`;
+          return null;
+        };
+        const productionStyle = (c as any).production_style_default as string | undefined;
+        const audienceMarket = (c as any).audience_market as string | undefined;
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-navy/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-2 sm:p-6 overflow-y-auto"
+            onClick={() => setOpenCreatorId(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-lift w-full max-w-3xl my-4 overflow-hidden flex flex-col max-h-[95vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header strip with gradient + close button */}
+              <div className={`relative bg-gradient-to-br ${tierStyle.gradient}`}>
+                <button
+                  onClick={() => setOpenCreatorId(null)}
+                  className="absolute top-3 right-3 z-10 w-8 h-8 inline-flex items-center justify-center rounded-full bg-white/80 backdrop-blur text-ink hover:bg-white"
+                  aria-label="Close"
+                >
+                  <XIcon size={16} />
+                </button>
+                <div className="px-6 pt-6 pb-4 flex items-end gap-4">
+                  <Avatar src={c.avatar_url} name={c.nickname} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                      {c.tier_code && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${tierStyle.chip}`}>{c.tier_code}</span>
+                      )}
+                      {isAnchor && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gold/15 text-gold border border-gold/40">
+                          <Crown size={9} /> Anchor
+                        </span>
+                      )}
+                      {!isAnchor && isPremium && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-greenSoft text-greenDark border border-greenDark/30">
+                          <Flame size={9} /> Premium
+                        </span>
+                      )}
+                      {isSaudi && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-green/10 text-greenDark border border-green/30">KSA</span>
+                      )}
+                    </div>
+                    <h2 className="text-2xl font-extrabold text-ink truncate">{c.nickname}</h2>
+                    {c.full_name && <div className="text-sm text-mute truncate">{c.full_name}</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Body — scrollable */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {/* USP — the one-liner pitch */}
+                <div className="rounded-xl bg-greenSoft/40 border border-greenDark/30 px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-wider text-greenDark font-bold mb-1">Why this creator</div>
+                  <div className="text-sm text-ink leading-relaxed">{usp}</div>
+                </div>
+
+                {/* Reach hero */}
+                {!dataPending && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-xl border border-line p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Total reach</div>
+                      <div className="text-2xl font-extrabold text-ink tabular-nums">{fmtCount(totalReach)}</div>
+                    </div>
+                    {peakItem && (
+                      <div className="rounded-xl border border-line p-3">
+                        <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Top platform</div>
+                        <div className="text-2xl font-extrabold text-greenDark tabular-nums">{fmtCount(peakItem.value)}</div>
+                        <div className="text-[10px] text-mute">{peakItem.label}</div>
+                      </div>
+                    )}
+                    <div className="rounded-xl border border-line p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Audience market</div>
+                      <div className="text-base font-bold text-ink">{audienceMarket || c.nationality || '—'}</div>
+                    </div>
+                    <div className="rounded-xl border border-line p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-mute font-bold">Production</div>
+                      <div className="text-base font-bold text-ink capitalize">{productionStyle?.replace(/_/g, ' ') || 'Mixed'}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Per-platform breakdown */}
+                {!dataPending && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-mute font-bold mb-2">Per-platform reach</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {reachItems.map(r => {
+                        const url = platformLink(r.handle as any, r.icon);
+                        const inner = (
+                          <>
+                            <div className="text-[10px] uppercase tracking-wider text-mute font-bold">{r.label}</div>
+                            <div className="flex items-baseline justify-between gap-2 mt-0.5">
+                              <div className="text-base font-bold text-ink tabular-nums">{fmtCount(r.value || 0)}</div>
+                              {r.handle && <div className="text-[10px] text-greenDark truncate">@{String(r.handle).replace(/^@/, '')}</div>}
+                            </div>
+                          </>
+                        );
+                        return url
+                          ? <a key={r.label} href={url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-line hover:border-greenDark hover:bg-greenSoft/30 px-3 py-2 transition">{inner}</a>
+                          : <div key={r.label} className="rounded-lg border border-line px-3 py-2">{inner}</div>;
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Achievements */}
+                {awards.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-gold font-bold mb-2">Achievements</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {awards.map(a => (
+                        <span key={a} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gold/10 text-gold border border-gold/30">
+                          <Trophy size={10} /> {a}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Past campaigns */}
+                {c.past_campaigns && c.past_campaigns.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-navy font-bold mb-2">Past brand partnerships</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {c.past_campaigns.map((pc, i) => (
+                        <span key={i} title={[pc.deliverable, pc.year, pc.conversion_signal].filter(Boolean).join(' · ')}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-navy/5 text-navy border border-navy/15">
+                          {pc.brand}{pc.year ? ` ${String(pc.year).slice(-2)}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Delivered KPIs */}
+                {c.delivered_kpis && c.delivered_kpis.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-greenDark font-bold mb-2">Delivered for past clients</div>
+                    <div className="space-y-1">
+                      {c.delivered_kpis.map((k, i) => (
+                        <div key={i} className="flex items-baseline justify-between gap-2 text-xs border-b border-line/60 pb-1">
+                          <span className="text-label">{k.kpi}{k.source ? <span className="text-mute italic"> · {k.source}</span> : ''}</span>
+                          <span className="font-bold text-ink tabular-nums">{k.value}{k.unit ? ` ${k.unit}` : ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes / pitch */}
+                {c.notes && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-mute font-bold mb-1">Notes</div>
+                    <div className="text-xs text-label leading-relaxed">{c.notes}</div>
+                  </div>
+                )}
+
+                {/* Internal — rates only when showRates is on */}
+                {showRates && (
+                  <div className="rounded-xl border border-greenDark/30 bg-greenSoft/20 p-4">
+                    <div className="text-[10px] uppercase tracking-wider text-greenDark font-bold mb-2">Internal — starting from</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      {[
+                        { label: 'IG Reel',     v: c.rate_ig_reel },
+                        { label: 'TikTok',      v: c.rate_tiktok_ours },
+                        { label: 'YT Full',     v: c.rate_yt_full },
+                        { label: 'YT Short',    v: c.rate_yt_short },
+                        { label: 'Twitch/Kick', v: c.rate_twitch_kick_live },
+                      ].filter(r => r.v && r.v > 0).map(r => (
+                        <div key={r.label} className="flex justify-between bg-white border border-line rounded-md px-2 py-1.5">
+                          <span className="text-label">{r.label}</span>
+                          <span className="font-bold text-greenDark tabular-nums">SAR {r.v.toLocaleString('en-US')}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {c.pricing_rationale && (
+                      <div className="text-[10px] text-mute italic mt-2 leading-snug">{c.pricing_rationale}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* ─── Sticky CTA footer ───────────────────────────────────── */}
+              <div className="border-t border-line bg-bg/40 px-6 py-4 flex items-center gap-3 flex-wrap">
+                <a
+                  href={`/quote/new?focus_creator=${c.id}`}
+                  className="btn btn-primary inline-flex items-center gap-2 px-4 py-2"
+                >
+                  <Sparkles size={14} /> Book {c.nickname}
+                </a>
+                <a
+                  href={`mailto:Sales@falcons.sa?subject=${encodeURIComponent(`Booking inquiry — ${c.nickname}`)}&body=${encodeURIComponent(`Hi Team Falcons,\n\nWe'd like to discuss a campaign with ${c.nickname}.\n\nBrief:\n- Brand:\n- Objective:\n- Markets:\n- Timing:\n\nThanks.`)}`}
+                  className="btn btn-ghost inline-flex items-center gap-2 px-4 py-2 text-sm"
+                >
+                  <ArrowUpRight size={14} /> Email Sales
+                </a>
+                <span className="text-[11px] text-mute ml-auto">
+                  Sales@falcons.sa · +966 53 370 4233
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+            {/* ─── Footer note ──────────────────────────────────────────────── */}
+      <div className="text-center text-xs text-mute leading-relaxed px-4">
+        <strong className="text-ink">Pitch mode</strong> hides rates by default — toggle <em>Rates ON</em> in the filter bar for internal review.
+        Every rate is engine-locked, methodology-defensible, and refreshes live from the database.
+      </div>
+    </div>
+  );
+}
