@@ -45,6 +45,11 @@ export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Partial<EsportsTeam>>({});
   const [saving, setSaving] = useState(false);
+  // Hide inactive / unpopulated team rows by default — the legacy game roster
+  // auto-imported 22 placeholder rows that we don't operate channels for.
+  const [showInactive, setShowInactive] = useState(false);
+  const inactiveCount = rows.filter(r => !r.is_active).length;
+  const visibleRows = showInactive ? rows : rows.filter(r => r.is_active);
 
   function start(t: EsportsTeam) {
     setEditing(t.id); setDraft({ ...t });
@@ -74,14 +79,30 @@ export function EsportsTeamsEditor({ initial }: { initial: EsportsTeam[] }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Kpi label="Teams" value={rows.length.toString()} />
-        <Kpi label="Active" value={rows.filter(r => r.is_active).length.toString()} />
-        <Kpi label="Channels populated" value={rows.filter(r => r.handle_ig || r.handle_x || r.handle_tiktok || r.handle_yt || r.handle_twitch).length.toString()} />
+        <Kpi label="Active brand accounts" value={rows.filter(r => r.is_active).length.toString()} />
+        <Kpi label="Channels populated" value={rows.filter(r => r.is_active && (r.handle_ig || r.handle_x || r.handle_tiktok || r.handle_yt || r.handle_twitch)).length.toString()} />
         <Kpi label="Total reach" value={fmtFollow(totalFollowers)} accent />
+        <Kpi label="Inactive / legacy" value={inactiveCount.toString()} />
+      </div>
+
+      {/* Show-inactive toggle */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs text-mute">
+          {visibleRows.length} of {rows.length} teams shown — {showInactive
+            ? <>inactive included.</>
+            : <>{inactiveCount} inactive/legacy rows hidden.</>}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowInactive(v => !v)}
+          className="btn btn-ghost text-xs"
+        >
+          {showInactive ? `Hide inactive (${inactiveCount})` : `Show inactive (${inactiveCount})`}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {rows.map(t => {
+        {visibleRows.map(t => {
           const isEdit = editing === t.id;
           const cur = isEdit ? { ...t, ...draft } as EsportsTeam : t;
           const reach = Number(cur.followers_ig||0) + Number(cur.followers_x||0) + Number(cur.followers_tiktok||0) +
